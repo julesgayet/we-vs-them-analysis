@@ -1,0 +1,14 @@
+pandas
+spacy
+transformers
+torch
+sentence-transformers
+shap
+lime
+faiss-cpu
+langchain
+langchain-community
+streamlit
+matplotlib
+seaborn
+python-dotenv
