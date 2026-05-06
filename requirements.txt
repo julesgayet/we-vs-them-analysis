@@ -12,3 +12,4 @@ streamlit
 matplotlib
 seaborn
 python-dotenv
+datasets
