@@ -1,37 +1,55 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
-# Load your processed data
-df = pd.read_csv("data/processed/polarized_sport_final.csv")
+# Load all processed data
+dfs = []
+for root, _, files in os.walk("data/processed"):
+    for file in files:
+        if file.endswith(".csv"):
+            try:
+                temp_df = pd.read_csv(os.path.join(root, file), low_memory=False)
+                if 'clean_text' in temp_df.columns and 'is_polarized' in temp_df.columns:
+                    # Determine platform from the folder name
+                    platform = os.path.basename(root).capitalize()
+                    temp_df['platform'] = platform
+                    dfs.append(temp_df)
+            except Exception as e:
+                pass
 
-# Define categories for bias check
-categories = {
-    'Football/Soccer': ['football', 'soccer', 'fifa', 'goal', 'pitch'],
-    'Basketball': ['nba', 'basketball', 'hoop', 'lakers'],
-    'Olympics': ['olympic', 'gold medal', 'athens', 'games'],
-    'Baseball': ['baseball', 'mlb', 'sox', 'yankees']
-}
+if not dfs:
+    print("Error: No processed data found. Run linguistic_analysis.py first.")
+    exit()
 
-def detect_sport(text):
-    text = str(text).lower()
-    for sport, keywords in categories.items():
-        if any(kw in text for kw in keywords):
-            return sport
-    return 'Other/General'
+df = pd.concat(dfs, ignore_index=True)
 
-# Apply categorization
-df['sport_category'] = df['text'].apply(detect_sport)
+# Calculate distribution by platform
+platform_stats = df['platform'].value_counts(normalize=True) * 100
+print("--- Dataset Distribution by Platform ---")
+print(platform_stats)
+print("\n")
 
-# Calculate distribution
-stats = df['sport_category'].value_counts(normalize=True) * 100
-print("--- Dataset Distribution (Bias Check) ---")
-print(stats)
+# Calculate Polarization by Platform
+polarized_stats = df.groupby('platform')['is_polarized'].mean() * 100
+print("--- Percentage of Polarized Content by Platform ---")
+print(polarized_stats)
 
-# Save visualization for your internship report
-plt.figure(figsize=(8, 8)) # size of the graph
-stats.plot(kind='bar', color='skyblue')
-plt.title("Distribution of Sports in Dataset")
-plt.ylabel("Percentage (%)")
-plt.xticks(rotation=45, ha='right')
+# Save visualization
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+# Plot 1: Distribution of Platform
+platform_stats.plot(kind='bar', color='skyblue', ax=ax1)
+ax1.set_title("Distribution of Data by Platform")
+ax1.set_ylabel("Percentage of Dataset (%)")
+ax1.tick_params(axis='x', rotation=45)
+
+# Plot 2: Polarization by Platform
+polarized_stats.plot(kind='bar', color='salmon', ax=ax2)
+ax2.set_title("Percentage of 'Us vs Them' Content")
+ax2.set_ylabel("% Polarized")
+ax2.tick_params(axis='x', rotation=45)
+
 plt.tight_layout()
-plt.savefig("data/processed/bias_distribution.png")
+output_path = "data/processed/platform_distribution.png"
+plt.savefig(output_path)
+print(f"\n✅ Saved new visualization to {output_path}")

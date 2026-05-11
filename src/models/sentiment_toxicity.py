@@ -3,67 +3,96 @@ import torch
 from transformers import pipeline
 from tqdm import tqdm
 import os
+from pathlib import Path
 
-def main():
-    print("Loading data...")
-    input_path = "data/processed/polarized_sport_final.csv"
-    output_path = "data/processed/final_scored_data.csv"
+def process_file(input_file, output_file, sentiment_pipeline, toxicity_pipeline):
+    print(f"\nLoading data from {input_file}...")
+    try:
+        df = pd.read_csv(input_file, low_memory=False)
+    except Exception as e:
+        print(f"Error reading {input_file}: {e}")
+        return
     
-    df = pd.read_csv(input_path)
-    
+    if 'clean_text' not in df.columns:
+        print(f"Skipping {input_file}: No 'clean_text' column found.")
+        return
+
     print(f"Dataset size: {len(df)} rows.")
     
-    # Ensure no NaN in clean_text
-    df['clean_text'] = df['clean_text'].fillna(df['text']).astype(str)
+    # Ensure all elements are strictly valid strings
+    df['clean_text'] = df['clean_text'].fillna("").astype(str)
+    # Force str conversion and drop empty strings or purely whitespace
+    df['clean_text'] = df['clean_text'].apply(lambda x: str(x).strip())
     
-    # We will use MPS (Apple Silicon GPU) if available, otherwise CPU
+    # We can only score non-empty texts to prevent pipeline errors
+    # We will score all, but map empty texts to neutral/0.0
+    valid_mask = df['clean_text'] != ""
+    valid_texts = df.loc[valid_mask, 'clean_text'].tolist()
+    
+    # Prepare output arrays
+    sentiments = ['neutral'] * len(df)
+    toxicities = [0.0] * len(df)
+
+    if len(valid_texts) > 0:
+        print(f"Extracting Sentiment on {len(valid_texts)} valid rows...")
+        valid_sentiments = []
+        for out in tqdm(sentiment_pipeline(valid_texts, batch_size=128, truncation=True, max_length=128), total=len(valid_texts)):
+            valid_sentiments.append(out['label'])
+            
+        print("Extracting Toxicity...")
+        valid_toxicities = []
+        for out in tqdm(toxicity_pipeline(valid_texts, batch_size=128, truncation=True, max_length=128), total=len(valid_texts)):
+            if isinstance(out, list):
+                toxic_score = next((item['score'] for item in out if item['label'] == 'toxic'), out[0]['score'] if out else 0.0)
+            else:
+                toxic_score = out.get('score', 0.0)
+            valid_toxicities.append(toxic_score)
+            
+        # Re-assign back to full dataframe
+        df.loc[valid_mask, 'sentiment'] = valid_sentiments
+        df.loc[valid_mask, 'toxicity'] = valid_toxicities
+    else:
+        df['sentiment'] = sentiments
+        df['toxicity'] = toxicities
+
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    print(f"Saving results to {output_file}...")
+    df.to_csv(output_file, index=False)
+
+def main():
+    input_dir = "data/processed"
+    output_dir = "data/scored"
+    
+    if not os.path.exists(input_dir):
+        print(f"Error: {input_dir} not found.")
+        return
+
     device = torch.device('mps') if torch.backends.mps.is_available() else (
              torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
-    device_id = -1 if device.type == 'cpu' else (0 if device.type == 'cuda' else 'mps')
     print(f"Using device: {device}")
 
-    # 1. Sentiment Analysis Pipeline
-    print("Initializing Sentiment Analysis model...")
-    # cardiffnlp/twitter-roberta-base-sentiment-latest is great for 3-class sentiment
+    # Use float16 for massive speedup on modern GPUs/Apple Silicon
+    dtype = torch.float16 if device.type in ['mps', 'cuda'] else torch.float32
+
+    print(f"Initializing Models with precision {dtype}...")
     sentiment_model = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-    sentiment_pipeline = pipeline("sentiment-analysis", model=sentiment_model, tokenizer=sentiment_model, device=device)
+    sentiment_pipeline = pipeline("sentiment-analysis", model=sentiment_model, tokenizer=sentiment_model, device=device, torch_dtype=dtype)
     
-    # 2. Toxicity Detection Pipeline
-    print("Initializing Toxicity Detection model...")
-    # unitary/toxic-bert outputs toxicity score
     toxicity_model = "unitary/toxic-bert"
-    toxicity_pipeline = pipeline("text-classification", model=toxicity_model, tokenizer=toxicity_model, device=device, return_all_scores=True)
+    toxicity_pipeline = pipeline("text-classification", model=toxicity_model, tokenizer=toxicity_model, device=device, return_all_scores=True, torch_dtype=dtype)
 
-    print(f"Running inference on {len(df)} rows. This might take a while...")
-    
-    # Extract texts as list for pipeline
-    texts = df['clean_text'].tolist()
-    
-    # Process Sentiment
-    print("Extracting Sentiment...")
-    sentiments = []
-    # We use batch size for efficiency
-    for out in tqdm(sentiment_pipeline(texts, batch_size=32, truncation=True, max_length=512), total=len(texts)):
-        sentiments.append(out['label']) # Typically 'positive', 'neutral', 'negative'
-        
-    df['sentiment'] = sentiments
-
-    # Process Toxicity
-    print("Extracting Toxicity...")
-    toxicities = []
-    for out in tqdm(toxicity_pipeline(texts, batch_size=32, truncation=True, max_length=512), total=len(texts)):
-        # out can be a dict {'label': 'toxic', 'score': ...} or a list of dicts depending on pipeline config
-        if isinstance(out, list):
-            toxic_score = next((item['score'] for item in out if item['label'] == 'toxic'), out[0]['score'] if out else 0.0)
-        else:
-            toxic_score = out.get('score', 0.0)
-        toxicities.append(toxic_score)
-        
-    df['toxicity'] = toxicities
-
-    print("Saving results...")
-    df.to_csv(output_path, index=False)
-    print(f"Scored data saved successfully to {output_path}!")
+    for root, dirs, files in os.walk(input_dir):
+        for file in files:
+            if file.endswith('.csv'):
+                input_file = os.path.join(root, file)
+                rel_path = os.path.relpath(input_file, input_dir)
+                output_file = os.path.join(output_dir, rel_path)
+                
+                if os.path.exists(output_file):
+                    print(f"Skipping {input_file}, output already exists at {output_file}")
+                    continue
+                    
+                process_file(input_file, output_file, sentiment_pipeline, toxicity_pipeline)
 
 if __name__ == "__main__":
     main()
