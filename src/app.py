@@ -92,46 +92,46 @@ else:
     st.sidebar.success("✅ AI Scoring Complete")
 
 # --- TABS ---
-tab1, tab2, tab3 = st.tabs(["📊 Vue Globale", "🚨 Analyse Toxicité", "🔍 Explorateur de Données"])
+tab1, tab2, tab3 = st.tabs(["📊 Global Overview", "🚨 Toxicity Analysis", "🔍 Data Explorer"])
 
 with tab1:
-    st.header("Vue Globale des Données")
+    st.header("Global Data Overview")
     
     # KPIs
     col1, col2, col3 = st.columns(3)
     pol_pct = filtered_df['is_polarized'].mean() * 100
-    with col1: st.metric("Messages Analysés", f"{len(filtered_df):,}")
-    with col2: st.metric("Taux de Polarisation", f"{pol_pct:.1f}%")
-    with col3: st.metric("Score de Toxicité Moyen", f"{filtered_df['toxicity'].mean():.3f}")
+    with col1: st.metric("Analyzed Messages", f"{len(filtered_df):,}")
+    with col2: st.metric("Polarization Rate", f"{pol_pct:.1f}%")
+    with col3: st.metric("Average Toxicity Score", f"{filtered_df['toxicity'].mean():.3f}")
     
     st.markdown("---")
     c1, c2 = st.columns(2)
     
     with c1:
-        st.subheader("Répartition par Plateforme")
+        st.subheader("Distribution by Platform")
         if selected_platform == "All":
             plat_counts = df['platform'].value_counts().reset_index()
-            plat_counts.columns = ['Plateforme', 'Nombre']
-            fig_plat = px.pie(plat_counts, values='Nombre', names='Plateforme', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
+            plat_counts.columns = ['Platform', 'Count']
+            fig_plat = px.pie(plat_counts, values='Count', names='Platform', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
             fig_plat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9")
             st.plotly_chart(fig_plat, use_container_width=True)
         else:
-            st.info("Sélectionnez 'All' pour voir la répartition globale.")
+            st.info("Select 'All' to view global distribution.")
 
     with c2:
-        st.subheader("Distribution des Sentiments")
+        st.subheader("Sentiment Distribution")
         sent_counts = filtered_df[filtered_df['is_scored'] == True]['sentiment'].value_counts().reset_index()
         if not sent_counts.empty:
-            sent_counts.columns = ['Sentiment', 'Nombre']
+            sent_counts.columns = ['Sentiment', 'Count']
             color_map = {'positive': '#2e7d32', 'neutral': '#1f77b4', 'negative': '#d32f2f'}
-            fig_sent = px.bar(sent_counts, x='Sentiment', y='Nombre', color='Sentiment', color_discrete_map=color_map)
+            fig_sent = px.bar(sent_counts, x='Sentiment', y='Count', color='Sentiment', color_discrete_map=color_map)
             fig_sent.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9", showlegend=False)
             st.plotly_chart(fig_sent, use_container_width=True)
         else:
-            st.info("Attente des résultats de l'IA...")
+            st.info("Waiting for AI results...")
 
 with tab2:
-    st.header("Analyse de l'Impact de la Polarisation")
+    st.header("Polarization Impact Analysis")
     
     pol_df = filtered_df[filtered_df['is_polarized'] == True]
     non_pol_df = filtered_df[filtered_df['is_polarized'] == False]
@@ -141,50 +141,50 @@ with tab2:
     
     if scored_percent > 0:
         fig_tox = px.bar(
-            x=["Normal", "Polarisé ('Nous vs Eux')"], 
+            x=["Normal", "Polarized ('Us vs Them')"], 
             y=[avg_tox_non_pol, avg_tox_pol],
-            color=["Normal", "Polarisé"],
-            color_discrete_map={"Normal": "#1f77b4", "Polarisé": "#ff4b4b"},
-            labels={'x': 'Type de Message', 'y': 'Score de Toxicité Moyen'},
-            title="Comparaison Directe : L'impact du langage polarisé sur la toxicité"
+            color=["Normal", "Polarized"],
+            color_discrete_map={"Normal": "#1f77b4", "Polarized": "#ff4b4b"},
+            labels={'x': 'Message Type', 'y': 'Average Toxicity Score'},
+            title="Direct Comparison: Impact of polarized language on toxicity"
         )
         fig_tox.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9", showlegend=False)
         st.plotly_chart(fig_tox, use_container_width=True)
     else:
-        st.info("Données en cours de génération...")
+        st.info("Generating data...")
 
-    st.markdown("### 🚨 Top 10 Commentaires les plus Toxiques")
+    st.markdown("### 🚨 Top 10 Most Toxic Comments")
     top_toxic = filtered_df[filtered_df['is_scored'] == True].sort_values(by='toxicity', ascending=False).head(10)
     
     if top_toxic.empty:
-        st.info("Aucun commentaire n'a encore été analysé.")
+        st.info("No comments have been analyzed yet.")
     else:
         for idx, row in top_toxic.iterrows():
-            with st.expander(f"Toxicité: {row['toxicity']:.2f} | {row['platform']} | Sentiment: {row['sentiment']}"):
-                st.write(f"**Texte original:** {row['clean_text']}")
-                st.write(f"*Polarisé ?* {'Oui' if row['is_polarized'] else 'Non'}")
+            with st.expander(f"Toxicity: {row['toxicity']:.2f} | {row['platform']} | Sentiment: {row['sentiment']}"):
+                st.write(f"**Original text:** {row['clean_text']}")
+                st.write(f"*Polarized?* {'Yes' if row['is_polarized'] else 'No'}")
 
 with tab3:
-    st.header("Explorateur de Données Interactif")
-    st.markdown("Filtrez et explorez vous-même le dataset complet pour trouver des exemples concrets pour votre rapport.")
+    st.header("Interactive Data Explorer")
+    st.markdown("Filter and explore the complete dataset yourself to find concrete examples for your report.")
     
     col_f1, col_f2, col_f3 = st.columns(3)
-    filter_pol = col_f1.selectbox("Type de message", ["Tous", "Polarisés uniquement", "Non Polarisés"])
-    filter_sent = col_f2.selectbox("Sentiment", ["Tous", "negative", "neutral", "positive"])
-    min_tox = col_f3.slider("Toxicité minimum", 0.0, 1.0, 0.0, 0.05)
+    filter_pol = col_f1.selectbox("Message Type", ["All", "Polarized only", "Non-polarized"])
+    filter_sent = col_f2.selectbox("Sentiment", ["All", "negative", "neutral", "positive"])
+    min_tox = col_f3.slider("Minimum Toxicity", 0.0, 1.0, 0.0, 0.05)
     
     explore_df = filtered_df.copy()
-    if filter_pol == "Polarisés uniquement":
+    if filter_pol == "Polarized only":
         explore_df = explore_df[explore_df['is_polarized'] == True]
-    elif filter_pol == "Non Polarisés":
+    elif filter_pol == "Non-polarized":
         explore_df = explore_df[explore_df['is_polarized'] == False]
         
-    if filter_sent != "Tous":
+    if filter_sent != "All":
         explore_df = explore_df[explore_df['sentiment'] == filter_sent]
         
     explore_df = explore_df[explore_df['toxicity'] >= min_tox]
     
     display_df = explore_df[['platform', 'clean_text', 'is_polarized', 'sentiment', 'toxicity']].sort_values(by='toxicity', ascending=False)
     
-    st.metric("Résultats trouvés", f"{len(display_df):,}")
+    st.metric("Results Found", f"{len(display_df):,}")
     st.dataframe(display_df, use_container_width=True, height=500)
