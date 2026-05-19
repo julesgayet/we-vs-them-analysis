@@ -3,6 +3,15 @@ import pandas as pd
 import os
 import plotly.express as px
 import plotly.graph_objects as go
+from dotenv import load_dotenv
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint, ChatHuggingFace
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+load_dotenv()
+hf_token = os.getenv("HUGGINGFACE_TOKEN")
+if hf_token:
+    os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
 
 st.set_page_config(page_title="We vs Them Analysis", page_icon="🛡️", layout="wide")
 
@@ -92,7 +101,7 @@ else:
     st.sidebar.success("✅ AI Scoring Complete")
 
 # --- TABS ---
-tab1, tab2, tab3 = st.tabs(["📊 Global Overview", "🚨 Toxicity Analysis", "🔍 Data Explorer"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Global Overview", "🚨 Toxicity Analysis", "🔍 Data Explorer", "🤖 AI Assistant"])
 
 with tab1:
     st.header("Global Data Overview")
@@ -188,3 +197,81 @@ with tab3:
     
     st.metric("Results Found", f"{len(display_df):,}")
     st.dataframe(display_df, use_container_width=True, height=500)
+
+with tab4:
+    st.header("🤖 Project Shield AI Assistant")
+    st.markdown("Ask the AI agent any question about your data. It analyzes both global statistics and reads specific comments!")
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            
+    if prompt := st.chat_input("Ask something (e.g. 'What is the mood on Twitter today?')"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing data and generating response..."):
+                try:
+                    stats_context = f"""
+                    GLOBAL STATISTICS CONTEXT:
+                    - Total analyzed messages: {len(filtered_df)}
+                    - Polarization Rate (Us vs Them language): {pol_pct:.1f}%
+                    - Average Toxicity Score: {filtered_df['toxicity'].mean():.3f}
+                    """
+                    if not pol_df.empty and not non_pol_df.empty:
+                        stats_context += f"- Average Toxicity for Normal messages: {avg_tox_non_pol:.3f}\n"
+                        stats_context += f"- Average Toxicity for Polarized messages: {avg_tox_pol:.3f}\n"
+                    
+                    faiss_path = "data/faiss_index"
+                    retrieved_docs_text = "No specific examples found."
+                    if os.path.exists(faiss_path):
+                        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+                        vectorstore = FAISS.load_local(faiss_path, embeddings, allow_dangerous_deserialization=True)
+                        docs = vectorstore.similarity_search(prompt, k=3)
+                        retrieved_docs_text = "\n".join([f"- {d.page_content}" for d in docs])
+                    
+                    llm = HuggingFaceEndpoint(
+                        repo_id="HuggingFaceH4/zephyr-7b-beta",
+                        task="text-generation",
+                        max_new_tokens=512,
+                        temperature=0.3,
+                        repetition_penalty=1.1
+                    )
+                    
+                    chat_model = ChatHuggingFace(llm=llm)
+                    
+                    system_prompt = f"""You are 'Project Shield AI', a professional data analyst assistant.
+You analyze social media polarization and toxicity. Answer concisely and naturally in a conversational way.
+Use the following GLOBAL STATISTICS and RETRIEVED EXAMPLES to answer the user accurately.
+Never make up statistics. If the data provides the answer, use it.
+
+{stats_context}
+
+RETRIEVED EXAMPLES FROM DATASET:
+{retrieved_docs_text}"""
+                    
+                    # Build conversational history
+                    messages_for_llm = [SystemMessage(content=system_prompt)]
+                    
+                    # Add all previous messages except the current prompt (since it's already in session_state, wait, we appended it above!)
+                    # Actually, the current prompt is the LAST item in st.session_state.messages.
+                    for msg in st.session_state.messages:
+                        if msg["role"] == "user":
+                            messages_for_llm.append(HumanMessage(content=msg["content"]))
+                        else:
+                            messages_for_llm.append(AIMessage(content=msg["content"]))
+                    
+                    response = chat_model.invoke(messages_for_llm)
+                    
+                    # The response is an AIMessage object.
+                    reply_text = response.content
+                    
+                    st.markdown(reply_text)
+                    st.session_state.messages.append({"role": "assistant", "content": reply_text})
+                except Exception as e:
+                    st.error(f"Error querying AI Agent: {e}")
