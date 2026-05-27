@@ -1,0 +1,154 @@
+import os
+from typing import Any, Dict, List, Optional
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+class CausalAnalyzer:
+    """Detects temporal spikes in sports comment volumes and maps them to external matches/events."""
+
+    def __init__(self, scored_dir: str = "data/scored", output_dir: str = "data/processed") -> None:
+        self.scored_dir = scored_dir
+        self.output_dir = output_dir
+        # Map of historical dates to key sports events/matches
+        self.event_calendar = {
+            "2025-04-15": "Champions League Quarter-Final (PSG vs Barcelona / Dortmund vs Atletico)",
+            "2025-04-16": "Champions League Quarter-Final (Man City vs Real Madrid / Bayern vs Arsenal)",
+            "2025-04-14": "Premier League Matchday / UCL Match Eve Anticipation",
+            "2023-01-16": "Supercopa de España Final (Real Madrid vs Barcelona)",
+            "2023-01-19": "Riyadh Season Cup (PSG vs Riyadh XI - Messi vs Ronaldo)",
+            "2025-02-25": "Champions League Round of 16 Matches",
+            "2025-02-14": "Valentine's Day / European League Fixtures",
+            "2025-02-10": "Premier League Monday Night Football",
+            "2022-04-28": "Europa League Semi-Finals First Leg",
+            "2025-03-04": "Champions League Round of 16 Second Leg"
+        }
+
+    def load_scored_data(self) -> pd.DataFrame:
+        """Loads and combines all scored CSV datasets."""
+        if not os.path.exists(self.scored_dir):
+            print(f"Directory not found: {self.scored_dir}")
+            return pd.DataFrame()
+
+        dfs: List[pd.DataFrame] = []
+        for root, _, files in os.walk(self.scored_dir):
+            for file in files:
+                if not file.endswith(".csv"):
+                    continue
+                self._load_single_file(os.path.join(root, file), dfs)
+
+        if not dfs:
+            return pd.DataFrame()
+
+        return pd.concat(dfs, ignore_index=True)
+
+    def _load_single_file(self, filepath: str, dfs: List[pd.DataFrame]) -> None:
+        """Helper to load a single scored CSV file and parse date."""
+        try:
+            df = pd.read_csv(filepath, low_memory=False)
+            col = 'timestamp' if 'timestamp' in df.columns else ('Timestamp' if 'Timestamp' in df.columns else 'createTimeISO')
+            if col not in df.columns:
+                return
+
+            df['parsed_date'] = pd.to_datetime(df[col], errors='coerce').dt.date
+            df = df.dropna(subset=['parsed_date'])
+            
+            # Determine platform name
+            rel_path = os.path.relpath(filepath, self.scored_dir)
+            path_parts = os.path.normpath(rel_path).split(os.sep)
+            platform = path_parts[0].capitalize() if len(path_parts) > 1 else "General"
+            df['platform'] = platform
+            
+            dfs.append(df)
+        except Exception as e:
+            print(f"Error loading {filepath}: {e}")
+
+    def detect_volume_spikes(self, df: pd.DataFrame, threshold_std: float = 1.5) -> pd.DataFrame:
+        """Detects dates where comment volume is significantly above rolling average."""
+        if df.empty:
+            return pd.DataFrame()
+
+        daily_counts = df.groupby('parsed_date').size().rename('comment_count').reset_index()
+        daily_counts = daily_counts.sort_values(by='parsed_date').reset_index(drop=True)
+
+        if len(daily_counts) < 7:
+            mean_val = daily_counts['comment_count'].mean()
+            std_val = daily_counts['comment_count'].std() if daily_counts['comment_count'].std() > 0 else 1.0
+        else:
+            rolling = daily_counts['comment_count'].rolling(window=7, min_periods=1)
+            mean_val = rolling.mean()
+            std_val = rolling.std().fillna(1.0)
+
+        daily_counts['is_spike'] = daily_counts['comment_count'] > (mean_val + threshold_std * std_val)
+        return daily_counts[daily_counts['is_spike'] == True]
+
+    def map_spikes_to_events(self, spikes_df: pd.DataFrame) -> pd.DataFrame:
+        """Maps detected spikes to known external sport events."""
+        if spikes_df.empty:
+            return pd.DataFrame()
+
+        spikes_df['event'] = spikes_df['parsed_date'].apply(
+            lambda d: self.event_calendar.get(str(d), "Unknown Sports Event")
+        )
+        return spikes_df
+
+    def generate_causal_graph(self, output_path: str = "data/processed/causal_graph.png") -> None:
+        """Generates and saves a beautiful causal flowchart using matplotlib."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.axis('off')
+
+        # Draw nodes and directed causal arrows
+        node_style = dict(boxstyle="round,pad=0.5", fc="lightblue", ec="blue", lw=2)
+        arrow_style = dict(arrowstyle="->", lw=2.5, color="gray")
+
+        ax.text(0.1, 0.8, "External Match / Event\n(e.g., Champions League)", ha="center", va="center", bbox=node_style, fontsize=12)
+        ax.text(0.5, 0.8, "Spike in Activity\n(High Volume of Comments)", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightyellow", ec="orange", lw=2), fontsize=12)
+        ax.text(0.9, 0.8, "Increased Toxicity\n& Out-group Hostility", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightpink", ec="red", lw=2), fontsize=12)
+
+        ax.text(0.5, 0.4, "Us vs Them Polarization\n(In-group Bias)", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightgreen", ec="green", lw=2), fontsize=12)
+
+        # Arrows
+        ax.annotate("", xy=(0.35, 0.8), xytext=(0.25, 0.8), arrowprops=arrow_style)
+        ax.annotate("", xy=(0.75, 0.8), xytext=(0.65, 0.8), arrowprops=arrow_style)
+        ax.annotate("", xy=(0.5, 0.52), xytext=(0.5, 0.68), arrowprops=arrow_style)
+        ax.annotate("", xy=(0.8, 0.7), xytext=(0.6, 0.5), arrowprops=arrow_style)
+
+        # Labels on arrows
+        ax.text(0.3, 0.83, "triggers", ha="center", va="center", fontsize=10, fontstyle="italic")
+        ax.text(0.7, 0.83, "exacerbates", ha="center", va="center", fontsize=10, fontstyle="italic")
+        ax.text(0.52, 0.6, "drives out-grouping", ha="left", va="center", fontsize=10, fontstyle="italic")
+        ax.text(0.72, 0.58, "correlates with", ha="left", va="center", fontsize=10, fontstyle="italic")
+
+        ax.set_title("Causal Pathway of 'Us vs Them' Polarization during Sports Events", fontsize=14, fontweight="bold", pad=20)
+        
+        plt.tight_layout()
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        plt.savefig(output_path, dpi=150)
+        plt.close()
+        print(f"✅ Saved causal graph visualization to {output_path}")
+
+    def run_analysis(self) -> None:
+        """Runs the entire causal analysis pipeline."""
+        df = self.load_scored_data()
+        if df.empty:
+            print("Error: No scored data found. Run scoring pipeline first.")
+            return
+
+        spikes = self.detect_volume_spikes(df)
+        spikes_with_events = self.map_spikes_to_events(spikes)
+
+        print("\n--- Detected Activity Spikes and External Events ---")
+        if spikes_with_events.empty:
+            print("No significant activity spikes found.")
+        else:
+            print(spikes_with_events.to_string(index=False))
+
+        # Save spikes list
+        os.makedirs(self.output_dir, exist_ok=True)
+        spikes_with_events.to_csv(os.path.join(self.output_dir, "detected_spikes.csv"), index=False)
+        self.generate_causal_graph()
+
+
+if __name__ == "__main__":
+    analyzer = CausalAnalyzer()
+    analyzer.run_analysis()

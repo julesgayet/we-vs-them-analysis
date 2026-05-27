@@ -233,6 +233,11 @@ class AIAssistant:
 
     def ask(self, prompt: str, history: List[Dict[str, str]], filtered_df: pd.DataFrame) -> str:
         """Sends the question along with chat history and vector search context to the LLM."""
+        from models.safety_guardrails import SafetyGuardrail
+        guardrail = SafetyGuardrail()
+        if guardrail.is_ultra_toxic(prompt):
+            return "🛡️ **Safety Policy Warning**: Your prompt contains an ultra-toxic slur or variant. This request was blocked by Project Shield AI's guardrails."
+
         self._initialize_llm()
         assert self._chat_model is not None
 

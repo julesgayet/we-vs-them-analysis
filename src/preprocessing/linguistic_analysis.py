@@ -19,38 +19,79 @@ class TextCleaner:
         text = self.URL_PATTERN.sub('', text)
         text = self.WHITESPACE_PATTERN.sub(' ', text)
         return text.strip()
-
-
 class PolarizationAnalyzer:
-    """Analyzes text for polarized 'Us vs Them' linguistic structures."""
+    """Analyzes text for polarized 'Us vs Them' structures and grammatical features."""
 
     def __init__(self, spacy_model_name: str = "en_core_web_sm") -> None:
-        # Load spaCy model with only necessary components for speed
-        self.nlp = spacy.load(spacy_model_name, disable=["ner", "lemmatizer"])
+        self.nlp = spacy.load(spacy_model_name, disable=["ner"])
         self.us_group = {"we", "us", "our", "ours"}
         self.them_group = {"they", "them", "their", "theirs"}
+        self.intensifiers = {
+            "very", "extremely", "totally", "completely", "absolutely", "really", "so", 
+            "quite", "hugely", "incredibly", "highly", "fully", "utterly", "tremendously", 
+            "remarkably", "substantially", "particularly", "deeply", "strongly", "severely",
+            "especially", "wonderfully", "dreadfully", "exceptionally", "terribly", "unusually"
+        }
+        self.hedges = {
+            "maybe", "seem", "seemed", "seems", "believe", "believes", "believed",
+            "probably", "possibly", "perhaps", "might", "could", "would", "somewhat", 
+            "tend", "tends", "tended", "guess", "guesses", "guessed", "suppose", 
+            "supposed", "supposes", "think", "thinks", "thought", "appear", "appears", 
+            "appeared", "likely", "unlikely", "suggest", "suggests", "suggested", 
+            "doubt", "doubts", "doubted", "may", "almost", "mostly", "apparently", 
+            "arguably", "mainly", "generally"
+        }
+
+    def count_us_group(self, doc: Any) -> int:
+        """Counts 'Us' pronouns in the document."""
+        return sum(1 for t in doc if t.text.lower() in self.us_group)
+
+    def count_them_group(self, doc: Any) -> int:
+        """Counts 'Them' pronouns in the document."""
+        return sum(1 for t in doc if t.text.lower() in self.them_group)
+
+    def count_negations(self, doc: Any) -> int:
+        """Counts grammatical negation dependency labels."""
+        return sum(1 for t in doc if t.dep_ == "neg")
+
+    def count_intensifiers(self, doc: Any) -> int:
+        """Counts modifying adverbs from the intensifier dictionary."""
+        return sum(1 for t in doc if t.pos_ == "ADV" and t.text.lower() in self.intensifiers)
+
+    def count_hedges(self, doc: Any) -> int:
+        """Counts hedge markers from the hedge dictionary."""
+        return sum(1 for t in doc if t.text.lower() in self.hedges)
 
     def analyze_batch(self, texts: List[str], batch_size: int = 200) -> pd.DataFrame:
         """Process a list of texts and return counts and polarization flags."""
         us_counts = []
         them_counts = []
+        neg_counts = []
+        int_counts = []
+        hedge_counts = []
+        is_polarized = []
 
         print(f"🚀 Running NLP pipe on {len(texts)} rows...")
         for doc in self.nlp.pipe(texts, batch_size=batch_size):
-            tokens = [t.text.lower() for t in doc]
-            us_cnt = sum(1 for t in tokens if t in self.us_group)
-            them_cnt = sum(1 for t in tokens if t in self.them_group)
+            us_cnt = self.count_us_group(doc)
+            them_cnt = self.count_them_group(doc)
+            neg_cnt = self.count_negations(doc)
+            int_cnt = self.count_intensifiers(doc)
+            hedge_cnt = self.count_hedges(doc)
 
             us_counts.append(us_cnt)
             them_counts.append(them_cnt)
-
-        is_polarized = [
-            (u > 0 and t > 0) for u, t in zip(us_counts, them_counts)
-        ]
+            neg_counts.append(neg_cnt)
+            int_counts.append(int_cnt)
+            hedge_counts.append(hedge_cnt)
+            is_polarized.append(us_cnt > 0 and them_cnt > 0)
 
         return pd.DataFrame({
             "us_count": us_counts,
             "them_count": them_counts,
+            "negation_count": neg_counts,
+            "intensifier_count": int_counts,
+            "hedge_count": hedge_counts,
             "is_polarized": is_polarized
         })
 

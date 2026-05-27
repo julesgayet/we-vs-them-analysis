@@ -4,6 +4,8 @@ import streamlit as st
 import plotly.express as px
 from dotenv import load_dotenv
 from rag.assistant import AIAssistant
+from models.explainability import ModelExplainer
+from rag.agent import FunctionCallingAgent
 
 # Load environment variables
 load_dotenv()
@@ -126,7 +128,14 @@ else:
     st.sidebar.success("✅ AI Scoring Complete")
 
 # --- TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Global Overview", "🚨 Toxicity Analysis", "🔍 Data Explorer", "🤖 AI Assistant"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊 Global Overview", 
+    "🚨 Toxicity Analysis", 
+    "🔍 Data Explorer", 
+    "⚖️ Fairness & Causal", 
+    "🔍 XAI Explainer", 
+    "🤖 AI Assistant"
+])
 
 with tab1:
     st.header("Global Data Overview")
@@ -227,20 +236,104 @@ with tab3:
     st.dataframe(display_df, use_container_width=True, height=500)
 
 with tab4:
-    st.header("🤖 Project Shield AI Assistant")
-    st.markdown("Ask the AI agent any question about your data. It analyzes both global statistics and reads specific comments!")
+    st.header("⚖️ Bias, Fairness & Causal Spikes")
+    st.markdown("Auditing toxicity classification fairness metrics across platforms and tracing causal events.")
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        st.subheader("Platform Bias & Fairness Report")
+        report_path = "data/processed/fairness_report.txt"
+        if os.path.exists(report_path):
+            with open(report_path, "r", encoding="utf-8") as f:
+                st.text_area("Fairness Report Details", f.read(), height=400)
+        else:
+            st.warning("Fairness report not found. Run bias_check.py first.")
+            
+    with col_c2:
+        st.subheader("Causal Event Graph")
+        graph_path = "data/processed/causal_graph.png"
+        if os.path.exists(graph_path):
+            st.image(graph_path, caption="Causal Pathway Graph during Sports Events", use_container_width=True)
+        else:
+            st.warning("Causal graph not found. Run causal_analysis.py first.")
+            
+    st.markdown("---")
+    st.subheader("Detected Temporal Activity Spikes")
+    spikes_path = "data/processed/detected_spikes.csv"
+    if os.path.exists(spikes_path):
+        spikes_df = pd.read_csv(spikes_path)
+        st.dataframe(spikes_df[['parsed_date', 'comment_count', 'event']], use_container_width=True, height=250)
+    else:
+        st.warning("No detected spikes dataset found.")
 
+with tab5:
+    st.header("🔍 Explainable AI (XAI) Explainer")
+    st.markdown("Understand model decisions. This tab highlights token-level feature importances using LIME or SHAP (perturbation-based).")
+    
+    if "model_explainer" not in st.session_state:
+        st.session_state.model_explainer = ModelExplainer()
+
+    xai_input_mode = st.radio("Choose Input Method", ["Select Example from Data", "Input Custom Comment"])
+    
+    input_text = ""
+    if xai_input_mode == "Select Example from Data":
+        example_options = filtered_df[filtered_df['is_scored'] == True].sort_values(by='toxicity', ascending=False).head(20)['clean_text'].tolist()
+        if example_options:
+            input_text = st.selectbox("Select Comment to Explain", example_options)
+        else:
+            st.info("No scored comments available. Enter a custom comment.")
+            xai_input_mode = "Input Custom Comment"
+            
+    if xai_input_mode == "Input Custom Comment":
+        input_text = st.text_area("Enter sentence to explain:", "Oh, what a brilliant defense, letting them score in the last minute. /s")
+        
+    xai_method = st.selectbox("Explainability Method", ["LIME (Fast)", "SHAP (Deep Perturbation)"])
+    
+    if st.button("Generate Token Highlight Heatmap"):
+        if not input_text.strip():
+            st.warning("Please enter or select a comment.")
+        else:
+            with st.spinner("Calculating word feature importances..."):
+                try:
+                    st.session_state.model_explainer.initialize_pipeline()
+                    
+                    if xai_method == "LIME (Fast)":
+                        weights = st.session_state.model_explainer.explain_lime(input_text)
+                    else:
+                        weights = st.session_state.model_explainer.explain_shap_perturbation(input_text)
+                    
+                    heatmap_html = st.session_state.model_explainer.generate_heatmap_html(input_text, weights)
+                    
+                    st.markdown("### 🗺️ Feature Importance Heatmap")
+                    st.components.v1.html(heatmap_html, height=185, scrolling=False)
+                    
+                    st.markdown("### 🔗 Semantically Similar Comments in FAISS Vector Store")
+                    similar_docs = st.session_state.ai_assistant.retrieve_context_documents(input_text, k=4)
+                    st.markdown(similar_docs)
+                    
+                except Exception as e:
+                    st.error(f"XAI Error: {e}")
+
+with tab6:
+    st.header("🤖 Project Shield AI Assistant")
+    st.markdown("Ask the AI assistant about polarization, toxicity, or specific spikes.")
+    
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     if "ai_assistant" not in st.session_state:
         st.session_state.ai_assistant = AIAssistant()
 
+    if "react_agent" not in st.session_state:
+        st.session_state.react_agent = FunctionCallingAgent()
+
+    use_react_agent = st.checkbox("Activate ReAct Agent (runs Python analytical tools for complex queries)", value=False)
+
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask something (e.g. 'What is the mood on Twitter today?')"):
+    if prompt := st.chat_input("Ask something (e.g. 'Show me the top topics with highest polarization and also platform metrics for Twitter')"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -248,11 +341,14 @@ with tab4:
         with st.chat_message("assistant"):
             with st.spinner("Analyzing data and generating response..."):
                 try:
-                    reply_text = st.session_state.ai_assistant.ask(
-                        prompt,
-                        st.session_state.messages,
-                        filtered_df
-                    )
+                    if use_react_agent:
+                        reply_text = st.session_state.react_agent.run(prompt)
+                    else:
+                        reply_text = st.session_state.ai_assistant.ask(
+                            prompt,
+                            st.session_state.messages,
+                            filtered_df
+                        )
                     st.markdown(reply_text)
                     st.session_state.messages.append({"role": "assistant", "content": reply_text})
                 except Exception as e:

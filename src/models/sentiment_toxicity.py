@@ -85,7 +85,18 @@ class ModelScorer:
         ):
             toxicities.append(self._extract_toxic_score(out))
 
-        return sentiments, toxicities
+        # Enforce safety guardrail overrides
+        from models.safety_guardrails import SafetyGuardrail
+        guardrail = SafetyGuardrail()
+        
+        final_sentiments = []
+        final_toxicities = []
+        for text, sent, tox in zip(texts, sentiments, toxicities):
+            mod_sent, mod_tox = guardrail.moderate_score(text, sent, tox)
+            final_sentiments.append(mod_sent)
+            final_toxicities.append(mod_tox)
+
+        return final_sentiments, final_toxicities
 
     def score_file(self, input_file: str, output_file: str) -> None:
         """Applies sentiment and toxicity pipeline scoring to a single file."""
