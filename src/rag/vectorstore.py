@@ -51,13 +51,16 @@ class VectorStoreManager:
         self,
         df: pd.DataFrame,
         toxicity_threshold: float = 0.4,
-        normal_sample_size: int = 5000
+        normal_sample_size: int = 5000,
+        embed_all: bool = True
     ) -> pd.DataFrame:
-        """Filters highly polarized/toxic comments and samples normal comments."""
+        """Filters highly polarized/toxic comments and samples normal comments, or returns all."""
         if df.empty:
             return df
 
         full_df = df.drop_duplicates(subset=['clean_text'])
+        if embed_all:
+            return full_df
 
         # Polarized or highly toxic comments
         polarized_or_toxic = full_df[
@@ -78,7 +81,8 @@ class VectorStoreManager:
     def build_vector_store(
         self,
         toxicity_threshold: float = 0.4,
-        normal_sample_size: int = 5000
+        normal_sample_size: int = 5000,
+        embed_all: bool = True
     ) -> None:
         """Extracts text, loads embeddings, creates FAISS vector index, and saves it."""
         df = self.load_scored_datasets()
@@ -86,8 +90,13 @@ class VectorStoreManager:
             print("No scored data found. Vector store generation aborted.")
             return
 
-        target_df = self.filter_and_sample(df, toxicity_threshold, normal_sample_size)
-        print(f"Embedding {len(target_df)} highly relevant documents for RAG...")
+        target_df = self.filter_and_sample(
+            df, 
+            toxicity_threshold=toxicity_threshold, 
+            normal_sample_size=normal_sample_size, 
+            embed_all=embed_all
+        )
+        print(f"Embedding {len(target_df)} documents for RAG...")
 
         loader = DataFrameLoader(target_df, page_content_column="clean_text")
         docs = loader.load()
