@@ -65,7 +65,7 @@ class ModelExplainer:
         self.initialize_pipeline()
         assert self._toxicity_pipeline is not None
         
-        results = self._toxicity_pipeline(texts, truncation=True, max_length=128)
+        results = self._toxicity_pipeline(texts, batch_size=64, truncation=True, max_length=128)
         
         from models.safety_guardrails import SafetyGuardrail
         guardrail = SafetyGuardrail()
@@ -88,7 +88,8 @@ class ModelExplainer:
             text, 
             self.predict_probabilities, 
             num_features=num_features,
-            labels=(1,)
+            labels=(1,),
+            num_samples=250
         )
         return exp.as_list(label=1)
 

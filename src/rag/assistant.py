@@ -111,7 +111,7 @@ class AIAssistant:
     def generate_system_prompt(self, stats_context: str, retrieved_docs_text: str) -> str:
         """Assembles the system template using data and retrieved documents."""
         system_prompt = (
-            "You are 'Project Shield AI', a professional data analyst assistant.\n"
+            "You are a professional data analyst assistant.\n"
             "You analyze social media polarization and toxicity. Answer concisely and naturally in a conversational way.\n"
             "You are an expert AI Agent. You must NEVER make up numbers or statistics.\n"
             "You must EXCLUSIVELY use the global and platform-specific statistics dynamically calculated from the real dataset below. Do not cite any figures that do not explicitly appear in this context.\n\n"
@@ -236,7 +236,7 @@ class AIAssistant:
         from models.safety_guardrails import SafetyGuardrail
         guardrail = SafetyGuardrail()
         if guardrail.is_ultra_toxic(prompt):
-            return "🛡️ **Safety Policy Warning**: Your prompt contains an ultra-toxic slur or variant. This request was blocked by Project Shield AI's guardrails."
+            return "🛡️ **Safety Policy Warning**: Your prompt contains an ultra-toxic slur or variant. This request was blocked by the guardrails."
 
         self._initialize_llm()
         assert self._chat_model is not None

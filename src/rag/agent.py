@@ -143,13 +143,13 @@ class FunctionCallingAgent:
         from models.safety_guardrails import SafetyGuardrail
         guardrail = SafetyGuardrail()
         if guardrail.is_ultra_toxic(query):
-            return "🛡️ **Safety Policy Warning**: Your query contains an ultra-toxic slur or variant. This request was blocked by Project Shield AI's guardrails."
+            return "🛡️ **Safety Policy Warning**: Your query contains an ultra-toxic slur or variant. This request was blocked by the guardrails."
 
         self._initialize_llm()
         assert self._chat_model is not None
 
         system_prompt = (
-            "You are 'Project Shield AI's ReAct Data Analyst Agent. You solve questions step-by-step by thinking and invoking tools.\n"
+            "You are the ReAct Data Analyst Agent. You solve questions step-by-step by thinking and invoking tools.\n"
             "You have access to the following tools:\n\n"
             "- get_platform_metrics(platform: str): Returns polarization rates, average toxicity, and sentiment percentages for a given platform name ('twitter', 'tiktok', 'instagram').\n"
             "- get_spike_events(): Returns a list of detected temporal activity spikes mapped to external soccer matches/events.\n"

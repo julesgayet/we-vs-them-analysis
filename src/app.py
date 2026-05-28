@@ -69,6 +69,66 @@ class DataManager:
         combined_df = pd.concat(dfs, ignore_index=True)
         return combined_df.drop_duplicates(subset=['clean_text'])
 
+    def process_and_score_uploaded_csv(self, uploaded_file, platform_name: str) -> bool:
+        """Processes and scores an uploaded CSV file, saving it directly to scored directory."""
+        try:
+            df = pd.read_csv(uploaded_file, low_memory=False)
+            
+            from preprocessing.linguistic_analysis import TextCleaner, PolarizationAnalyzer
+            cleaner = TextCleaner()
+            analyzer = PolarizationAnalyzer()
+            
+            possible_columns = [
+                "childCommentText", "text", "Text",
+                "video_transcription_text", "caption", "parentText"
+            ]
+            text_col = None
+            for col in possible_columns:
+                if col in df.columns:
+                    text_col = col
+                    break
+            if not text_col:
+                obj_cols = df.select_dtypes(include=['object']).columns
+                text_col = obj_cols[0] if len(obj_cols) > 0 else df.columns[0]
+            
+            df['clean_text'] = df[text_col].fillna("").astype(str).apply(cleaner.clean)
+            
+            analysis_df = analyzer.analyze_batch(df['clean_text'].tolist())
+            df = pd.concat([df.reset_index(drop=True), analysis_df.reset_index(drop=True)], axis=1)
+            
+            from models.sentiment_toxicity import ModelScorer
+            scorer = ModelScorer()
+            
+            df['clean_text'] = df['clean_text'].str.strip()
+            valid_mask = df['clean_text'] != ""
+            valid_texts = df.loc[valid_mask, 'clean_text'].tolist()
+            
+            df['sentiment'] = 'neutral'
+            df['toxicity'] = 0.0
+            
+            if valid_texts:
+                sentiments, toxicities = scorer.score_texts(valid_texts)
+                df.loc[valid_mask, 'sentiment'] = sentiments
+                df.loc[valid_mask, 'toxicity'] = toxicities
+            
+            df['is_scored'] = True
+            df['platform'] = platform_name.capitalize()
+            
+            platform_dir = os.path.join(self.scored_dir, platform_name.lower())
+            os.makedirs(platform_dir, exist_ok=True)
+            output_filepath = os.path.join(platform_dir, uploaded_file.name)
+            df.to_csv(output_filepath, index=False)
+            
+            proc_platform_dir = os.path.join(self.processed_dir, platform_name.lower())
+            os.makedirs(proc_platform_dir, exist_ok=True)
+            df.to_csv(os.path.join(proc_platform_dir, uploaded_file.name), index=False)
+            
+            return True
+        except Exception as e:
+            print(f"Error processing uploaded CSV: {e}")
+            return False
+
+
 
 # Streamlit Setup
 st.set_page_config(page_title="We vs Them Analysis", page_icon="🛡️", layout="wide")
@@ -103,15 +163,17 @@ def get_dashboard_data() -> pd.DataFrame:
 
 df = get_dashboard_data()
 
-st.markdown("<h1 class='main-title'>🛡️ Project Shield Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-title'>We vs Them Analysis Dashboard</h1>", unsafe_allow_html=True)
 st.markdown("<p class='subtitle'>Interactive monitoring of sports and social commentary polarization.</p>", unsafe_allow_html=True)
 
 if df.empty:
     st.error("No data found. Please run linguistic_analysis.py first.")
     st.stop()
 
-# --- SIDEBAR FILTERS ---
-st.sidebar.title("🎛️ Filters")
+# --- SIDEBAR CONTROLS ---
+st.sidebar.title("🎛️ Controls")
+
+# Platform Filter
 platforms = ["All"] + sorted(list(df['platform'].unique()))
 selected_platform = st.sidebar.selectbox("Select Platform", platforms)
 
@@ -119,6 +181,32 @@ if selected_platform != "All":
     filtered_df = df[df['platform'] == selected_platform]
 else:
     filtered_df = df
+
+st.sidebar.markdown("---")
+
+# CSV File Upload Section
+st.sidebar.subheader("Upload New Dataset")
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+upload_platform = st.sidebar.text_input("Source/Platform Name", "Custom")
+
+if uploaded_file is not None:
+    if st.sidebar.button("Process & Score Dataset"):
+        with st.sidebar.status("Processing uploaded data...", expanded=True) as status:
+            st.write("Extracting linguistic features & running AI sentiment/toxicity pipelines...")
+            manager = DataManager()
+            success = manager.process_and_score_uploaded_csv(uploaded_file, upload_platform)
+            if success:
+                st.write("Updating FAISS vector index...")
+                from rag.vectorstore import VectorStoreManager
+                v_manager = VectorStoreManager()
+                v_manager.build_vector_store()
+                
+                status.update(label="✅ Success! Dataset Processed & Indexed", state="complete")
+                st.sidebar.success("Data uploaded. Reloading...")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                status.update(label="❌ Processing failed", state="error")
 
 st.sidebar.markdown("---")
 scored_percent = (filtered_df['is_scored'].sum() / len(filtered_df)) * 100
@@ -129,12 +217,12 @@ else:
 
 # --- TABS ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Global Overview", 
-    "🚨 Toxicity Analysis", 
-    "🔍 Data Explorer", 
-    "⚖️ Fairness & Causal", 
-    "🔍 XAI Explainer", 
-    "🤖 AI Assistant"
+    "Global Overview", 
+    "Toxicity Analysis", 
+    "Data Explorer", 
+    "Fairness & Causal", 
+    "XAI Explainer", 
+    "AI Assistant"
 ])
 
 with tab1:
@@ -199,14 +287,14 @@ with tab2:
     else:
         st.info("Generating data...")
 
-    st.markdown("### 🚨 Top 10 Most Toxic Comments")
+    st.markdown("### Top 10 Most Toxic Comments")
     top_toxic = filtered_df[filtered_df['is_scored'] == True].sort_values(by='toxicity', ascending=False).head(10)
 
     if top_toxic.empty:
         st.info("No comments have been analyzed yet.")
     else:
         for idx, row in top_toxic.iterrows():
-            with st.expander(f"Toxicity: {row['toxicity']:.2f} | {row['platform']} | Sentiment: {row['sentiment']}"):
+            with st.expander(f"Toxicity: {row['toxicity']:.4f} | {row['platform']} | Sentiment: {row['sentiment']}"):
                 st.write(f"**Original text:** {row['clean_text']}")
                 st.write(f"*Polarized?* {'Yes' if row['is_polarized'] else 'No'}")
 
@@ -236,7 +324,7 @@ with tab3:
     st.dataframe(display_df, use_container_width=True, height=500)
 
 with tab4:
-    st.header("⚖️ Bias, Fairness & Causal Spikes")
+    st.header("Bias, Fairness & Causal Spikes")
     st.markdown("Auditing toxicity classification fairness metrics across platforms and tracing causal events.")
     
     col_c1, col_c2 = st.columns(2)
@@ -267,7 +355,7 @@ with tab4:
         st.warning("No detected spikes dataset found.")
 
 with tab5:
-    st.header("🔍 Explainable AI (XAI) Explainer")
+    st.header("Explainable AI (XAI) Explainer")
     st.markdown("Understand model decisions. This tab highlights token-level feature importances using LIME or SHAP (perturbation-based).")
     
     if "model_explainer" not in st.session_state:
@@ -304,10 +392,10 @@ with tab5:
                     
                     heatmap_html = st.session_state.model_explainer.generate_heatmap_html(input_text, weights)
                     
-                    st.markdown("### 🗺️ Feature Importance Heatmap")
+                    st.markdown("### Feature Importance Heatmap")
                     st.components.v1.html(heatmap_html, height=185, scrolling=False)
                     
-                    st.markdown("### 🔗 Semantically Similar Comments in FAISS Vector Store")
+                    st.markdown("### Semantically Similar Comments in FAISS Vector Store")
                     similar_docs = st.session_state.ai_assistant.retrieve_context_documents(input_text, k=4)
                     st.markdown(similar_docs)
                     
@@ -315,7 +403,7 @@ with tab5:
                     st.error(f"XAI Error: {e}")
 
 with tab6:
-    st.header("🤖 Project Shield AI Assistant")
+    st.header("AI Assistant")
     st.markdown("Ask the AI assistant about polarization, toxicity, or specific spikes.")
     
     if "messages" not in st.session_state:

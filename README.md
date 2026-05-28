@@ -1,4 +1,4 @@
-# Project Shield - We vs Them Analysis Dashboard
+# We vs Them Analysis Dashboard
 
 This project is a modular data science and Natural Language Processing (NLP) platform designed to monitor, analyze, and quantify **polarization** ("Us vs Them" discourse) and **toxicity** across multiple social media networks (Twitter, TikTok, Instagram, and Reddit).
 
@@ -10,18 +10,18 @@ It features an interactive **Streamlit** dashboard integrated with an AI agent p
 
 The codebase is highly modularized, adhering strictly to SOLID principles:
 
-*   **`src/preprocessing/`**: Collection and initial linguistic pipelines.
-    *   `collect_data.py`: Scrapes Reddit comments using the PRAW API.
-    *   `download_hf_data.py`: Downloads and filters relevant datasets from Hugging Face.
-    *   `linguistic_analysis.py`: Analyzes grammar structures with **spaCy** to tag polarization.
-    *   `eda_analysis.py`: Extracts top key phrases in polarized discussions.
-    *   `bias_check.py`: Calculates platform distributions and exports bias charts.
-*   **`src/models/`**: Classification and scoring services.
-    *   `sentiment_toxicity.py`: Scores toxicity (**Toxic-BERT**) and sentiments (**Twitter-RoBERTa**) in batches.
-*   **`src/rag/`**: Vector database and AI agent logic.
-    *   `vectorstore.py`: Indexes the combined dataset into a local **FAISS** vector store using SentenceTransformers.
-    *   `assistant.py`: AI chat agent powered by **Qwen2.5-7B-Instruct** using LangChain.
-*   **`src/app.py`**: Presentation layer containing the Streamlit web layout.
+- **`src/preprocessing/`**: Collection and initial linguistic pipelines.
+  - `collect_data.py`: Scrapes Reddit comments using the PRAW API.
+  - `download_hf_data.py`: Downloads and filters relevant datasets from Hugging Face.
+  - `linguistic_analysis.py`: Analyzes grammar structures with **spaCy** to tag polarization.
+  - `eda_analysis.py`: Extracts top key phrases in polarized discussions.
+  - `bias_check.py`: Calculates platform distributions and exports bias charts.
+- **`src/models/`**: Classification and scoring services.
+  - `sentiment_toxicity.py`: Scores toxicity (**Toxic-BERT**) and sentiments (**Twitter-RoBERTa**) in batches.
+- **`src/rag/`**: Vector database and AI agent logic.
+  - `vectorstore.py`: Indexes the combined dataset into a local **FAISS** vector store using SentenceTransformers.
+  - `assistant.py`: AI chat agent powered by **Qwen2.5-7B-Instruct** using LangChain.
+- **`src/app.py`**: Presentation layer containing the Streamlit web layout.
 
 ---
 
@@ -102,7 +102,7 @@ The web application will open automatically in your browser at `http://localhost
 
 ## 📊 Dashboard Modules
 
-*   **Global Overview**: Key metrics (polarization rates, message count, average toxicity) and interactive visual breakdowns (Plotly).
-*   **Toxicity Analysis**: Side-by-side comparison of normal vs. polarized comments, and top 10 most toxic comments list.
-*   **Data Explorer**: High-performance tabular search with filters (toxicity threshold, platform, sentiment, and polarization).
-*   **AI Assistant**: Conversational agent answering complex analytical questions using dynamic stats and retrieved context examples.
+- **Global Overview**: Key metrics (polarization rates, message count, average toxicity) and interactive visual breakdowns (Plotly).
+- **Toxicity Analysis**: Side-by-side comparison of normal vs. polarized comments, and top 10 most toxic comments list.
+- **Data Explorer**: High-performance tabular search with filters (toxicity threshold, platform, sentiment, and polarization).
+- **AI Assistant**: Conversational agent answering complex analytical questions using dynamic stats and retrieved context examples.
