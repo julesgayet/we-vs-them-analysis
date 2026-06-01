@@ -171,7 +171,46 @@ if df.empty:
     st.stop()
 
 # --- SIDEBAR CONTROLS ---
-st.sidebar.title("🎛️ Controls")
+st.sidebar.title("Controls")
+
+# Scan processed directory dynamically to find all platform names
+tutor_platforms = ['Twitter', 'Tiktok', 'Instagram']
+hf_platforms = ['Reddit', 'Yallashoot']
+
+all_platforms_in_data = set()
+if os.path.exists("data/processed"):
+    for entry in os.scandir("data/processed"):
+        if entry.is_dir() and entry.name not in ['__pycache__', 'faiss_index']:
+            all_platforms_in_data.add(entry.name.capitalize())
+
+dataset_sources = []
+if any(p in all_platforms_in_data for p in tutor_platforms):
+    dataset_sources.append("Dataset (Twitter, TikTok, Instagram)")
+if any(p in all_platforms_in_data for p in hf_platforms):
+    dataset_sources.append("Hugging Face Dataset (Reddit, YallaShoot)")
+
+# Add custom uploaded platforms dynamically
+for plat in sorted(all_platforms_in_data):
+    if plat not in tutor_platforms and plat not in hf_platforms:
+        dataset_sources.append(f"{plat} Dataset ({plat})")
+
+if not dataset_sources:
+    dataset_sources = ["No Datasets Found"]
+
+selected_source = st.sidebar.radio("Select Dataset Source", dataset_sources)
+st.session_state.selected_source = selected_source
+
+if selected_source == "Dataset (Twitter, TikTok, Instagram)":
+    allowed_platforms = ['Twitter', 'Tiktok', 'Instagram']
+elif selected_source == "Hugging Face Dataset (Reddit, YallaShoot)":
+    allowed_platforms = ['Reddit', 'Yallashoot']
+else:
+    import re
+    match = re.search(r'\((.*?)\)', selected_source)
+    allowed_platforms = [match.group(1)] if match else []
+
+# Filter dataset to selected source
+df = df[df['platform'].isin(allowed_platforms)]
 
 # Platform Filter
 platforms = ["All"] + sorted(list(df['platform'].unique()))
@@ -327,23 +366,72 @@ with tab4:
     st.header("Bias, Fairness & Causal Spikes")
     st.markdown("Auditing toxicity classification fairness metrics across platforms and tracing causal events.")
     
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        st.subheader("Platform Bias & Fairness Report")
-        report_path = "data/processed/fairness_report.txt"
-        if os.path.exists(report_path):
-            with open(report_path, "r", encoding="utf-8") as f:
-                st.text_area("Fairness Report Details", f.read(), height=400)
-        else:
-            st.warning("Fairness report not found. Run bias_check.py first.")
+    # Calculate dynamic fairness metrics based on the active df (representing selected_source)
+    if not df.empty and 'is_polarized' in df.columns and 'toxicity' in df.columns:
+        fair_df = df.copy()
+        fair_df['y_true'] = fair_df['is_polarized'].astype(int)
+        fair_df['y_pred'] = (fair_df['toxicity'] > 0.5).astype(int)
+        
+        platforms_list = sorted(list(fair_df['platform'].unique()))
+        platform_metrics = {}
+        
+        for plat in platforms_list:
+            plat_df = fair_df[fair_df['platform'] == plat]
+            tp = ((plat_df['y_true'] == 1) & (plat_df['y_pred'] == 1)).sum()
+            fp = ((plat_df['y_true'] == 0) & (plat_df['y_pred'] == 1)).sum()
+            tn = ((plat_df['y_true'] == 0) & (plat_df['y_pred'] == 0)).sum()
+            fn = ((plat_df['y_true'] == 1) & (plat_df['y_pred'] == 0)).sum()
             
-    with col_c2:
-        st.subheader("Causal Event Graph")
-        graph_path = "data/processed/causal_graph.png"
-        if os.path.exists(graph_path):
-            st.image(graph_path, caption="Causal Pathway Graph during Sports Events", use_container_width=True)
-        else:
-            st.warning("Causal graph not found. Run causal_analysis.py first.")
+            tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+            
+            platform_metrics[plat] = {
+                "tpr": tpr,
+                "fpr": fpr,
+                "total_samples": len(plat_df)
+            }
+        
+        tprs = [m['tpr'] for m in platform_metrics.values()]
+        fprs = [m['fpr'] for m in platform_metrics.values()]
+        
+        fpr_gap = max(fprs) - min(fprs) if fprs else 0.0
+        tpr_gap = max(tprs) - min(tprs) if tprs else 0.0
+        eo_disparity = fpr_gap + tpr_gap
+        
+        # Format report string dynamically
+        report_lines = []
+        report_lines.append("==================================================")
+        report_lines.append("       DYNAMIC MODEL BIAS & FAIRNESS REPORT       ")
+        report_lines.append("==================================================")
+        report_lines.append(f"Selected Dataset Source: {selected_source}")
+        report_lines.append(f"Total scored comments analyzed: {len(fair_df):,}\n")
+        
+        report_lines.append("--- Platform Fairness Metrics (Proxy: Polarization as Target) ---")
+        for plat, metrics in platform_metrics.items():
+            report_lines.append(f"Platform: {plat}")
+            report_lines.append(f"  - Total Samples: {metrics['total_samples']:,}")
+            report_lines.append(f"  - True Positive Rate (TPR): {metrics['tpr']:.4f}")
+            report_lines.append(f"  - False Positive Rate (FPR): {metrics['fpr']:.4f}\n")
+        
+        report_lines.append("--- Disparities ---")
+        report_lines.append(f"  - False Positive Rate (FPR) Gap: {fpr_gap:.4f}")
+        report_lines.append(f"  - True Positive Rate (TPR) Gap: {tpr_gap:.4f}")
+        report_lines.append(f"  - Equalized Odds (EO) Disparity: {eo_disparity:.4f}\n")
+        
+        report_lines.append("--- Bias Mitigation Guidelines ---")
+        report_lines.append("1. Platform-Specific Classification Thresholds:")
+        report_lines.append("   Adjust toxicity classification thresholds per platform to calibrate and equalize FPRs.")
+        report_lines.append("2. Targeted Data Augmentation:")
+        report_lines.append("   Collect more training examples from under-represented platforms (e.g. TikTok) to align model representations.")
+        report_lines.append("3. Dialect/Slang Alignment:")
+        report_lines.append("   Fine-tune toxicity models on domain-specific social media text to decrease false positives caused by benign in-group slang.")
+        report_lines.append("4. Regular Audits:")
+        report_lines.append("   Run continuous fairness pipelines on newly collected samples to monitor drift in EO disparity.")
+        
+        dynamic_report = "\n".join(report_lines)
+        st.text_area("Fairness Report Details (Dynamic)", dynamic_report, height=450)
+    else:
+        st.warning("No data available to calculate fairness metrics.")
             
     st.markdown("---")
     st.subheader("Detected Temporal Activity Spikes")
@@ -392,11 +480,26 @@ with tab5:
                     
                     heatmap_html = st.session_state.model_explainer.generate_heatmap_html(input_text, weights)
                     
+                    # Calculate overall toxicity score
+                    probs = st.session_state.model_explainer.predict_probabilities([input_text])
+                    toxicity_score = float(probs[0][1])
+                    
+                    st.markdown("### Model Predictions")
+                    col_score, col_status = st.columns(2)
+                    with col_score:
+                        st.metric("Overall Toxicity Score", f"{toxicity_score:.4f}")
+                    with col_status:
+                        if toxicity_score >= 0.5:
+                            st.error("Model Classification: TOXIC 🚨")
+                        else:
+                            st.success("Model Classification: SAFE ✅")
+                    
                     st.markdown("### Feature Importance Heatmap")
                     st.components.v1.html(heatmap_html, height=185, scrolling=False)
                     
                     st.markdown("### Semantically Similar Comments in FAISS Vector Store")
-                    similar_docs = st.session_state.ai_assistant.retrieve_context_documents(input_text, k=4)
+                    allowed_plat_list = list(filtered_df['platform'].unique()) if not filtered_df.empty else None
+                    similar_docs = st.session_state.ai_assistant.retrieve_context_documents(input_text, k=4, allowed_platforms=allowed_plat_list)
                     st.markdown(similar_docs)
                     
                 except Exception as e:
@@ -415,8 +518,6 @@ with tab6:
     if "react_agent" not in st.session_state:
         st.session_state.react_agent = FunctionCallingAgent()
 
-    use_react_agent = st.checkbox("Activate ReAct Agent (runs Python analytical tools for complex queries)", value=False)
-
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -429,15 +530,27 @@ with tab6:
         with st.chat_message("assistant"):
             with st.spinner("Analyzing data and generating response..."):
                 try:
-                    if use_react_agent:
-                        reply_text = st.session_state.react_agent.run(prompt)
-                    else:
-                        reply_text = st.session_state.ai_assistant.ask(
-                            prompt,
-                            st.session_state.messages,
-                            filtered_df
-                        )
+                    # Build live dataset context for the agent
+                    platform_breakdown = df['platform'].value_counts().to_dict()
+                    breakdown_str = ", ".join([f"{k}: {v} comments" for k, v in platform_breakdown.items()])
+                    
+                    dataset_context = (
+                        f"- Selected Dataset Source Name: {selected_source}\n"
+                        f"- Platforms in this source: {', '.join(allowed_platforms)}\n"
+                        f"- Active platform filter in dashboard: {selected_platform}\n"
+                        f"- Total messages/comments analyzed: {len(df):,}\n"
+                        f"- Comments breakdown per platform: {breakdown_str}\n"
+                        f"- Overall polarization rate: {df['is_polarized'].mean() * 100:.2f}%\n"
+                        f"- Average toxicity score: {df['toxicity'].mean():.4f}\n"
+                    )
+
+                    reply_text = st.session_state.react_agent.run(
+                        prompt,
+                        chat_history=st.session_state.messages,
+                        dataset_context=dataset_context
+                    )
                     st.markdown(reply_text)
                     st.session_state.messages.append({"role": "assistant", "content": reply_text})
                 except Exception as e:
                     st.error(f"Error querying AI Agent: {e}")
+

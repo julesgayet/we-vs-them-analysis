@@ -39,10 +39,17 @@ class VectorStoreManager:
         return pd.concat(dfs, ignore_index=True)
 
     def _load_single_csv(self, filepath: str, dfs: List[pd.DataFrame]) -> None:
-        """Safely loads a single CSV file, cleaning up empty text rows."""
+        """Safely loads a single CSV file, cleaning up empty text rows and adding platform metadata."""
         try:
             df = pd.read_csv(filepath, low_memory=False)
             df = df[df['clean_text'].notna() & (df['clean_text'].str.strip() != "")]
+            
+            # Determine platform name based on directory structure
+            rel_path = os.path.relpath(filepath, self.input_dir)
+            path_parts = os.path.normpath(rel_path).split(os.sep)
+            platform = path_parts[0].capitalize() if len(path_parts) > 1 else "General"
+            df['platform'] = platform
+            
             dfs.append(df)
         except Exception as e:
             print(f"Error loading {filepath}: {e}")

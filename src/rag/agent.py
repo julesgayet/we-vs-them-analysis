@@ -9,7 +9,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 # Helper function to load dataset
 def load_all_scored_data(scored_dir: str = "data/scored") -> pd.DataFrame:
-    """Helper to load all scored comments from the scored folder."""
+    """Helper to load all scored comments from the scored folder, filtered by selected source in UI."""
     if not os.path.exists(scored_dir):
         return pd.DataFrame()
     dfs = []
@@ -29,7 +29,27 @@ def load_all_scored_data(scored_dir: str = "data/scored") -> pd.DataFrame:
                 pass
     if not dfs:
         return pd.DataFrame()
-    return pd.concat(dfs, ignore_index=True)
+    
+    df = pd.concat(dfs, ignore_index=True)
+    
+    # Filter based on active dataset source in streamlit session state if available
+    try:
+        import streamlit as st
+        if "selected_source" in st.session_state:
+            source = st.session_state.selected_source
+            if source == "Dataset (Twitter, TikTok, Instagram)":
+                df = df[df['platform'].isin(['Twitter', 'Tiktok', 'Instagram'])]
+            elif source == "Hugging Face Dataset (Reddit, YallaShoot)":
+                df = df[df['platform'].isin(['Reddit', 'Yallashoot'])]
+            else:
+                import re
+                match = re.search(r'\((.*?)\)', source)
+                if match:
+                    df = df[df['platform'] == match.group(1)]
+    except Exception:
+        pass
+        
+    return df
 
 
 # Tool Definitions
@@ -108,6 +128,29 @@ def get_top_polarized_topics() -> str:
     return ", ".join([f"{w} ({c})" for w, c in common])
 
 
+def retrieve_similar_comments(query: str) -> str:
+    """Retrieves real user comments from the dataset that match or are semantically close to a search query."""
+    from rag.assistant import AIAssistant
+    import streamlit as st
+    allowed_platforms = None
+    try:
+        if "selected_source" in st.session_state:
+            source = st.session_state.selected_source
+            if source == "Dataset (Twitter, TikTok, Instagram)":
+                allowed_platforms = ['Twitter', 'Tiktok', 'Instagram']
+            elif source == "Hugging Face Dataset (Reddit, YallaShoot)":
+                allowed_platforms = ['Reddit', 'Yallashoot']
+            else:
+                import re
+                match = re.search(r'\((.*?)\)', source)
+                if match:
+                    allowed_platforms = [match.group(1)]
+    except Exception:
+        pass
+    assistant = AIAssistant()
+    return assistant.retrieve_context_documents(query, k=5, allowed_platforms=allowed_platforms)
+
+
 class FunctionCallingAgent:
     """Implements a ReAct (Reasoning and Action) loop to answer NL queries by executing python analytical tools."""
 
@@ -121,8 +164,10 @@ class FunctionCallingAgent:
         self.tools: Dict[str, Callable[..., str]] = {
             "get_platform_metrics": get_platform_metrics,
             "get_spike_events": get_spike_events,
-            "get_top_polarized_topics": get_top_polarized_topics
+            "get_top_polarized_topics": get_top_polarized_topics,
+            "retrieve_similar_comments": retrieve_similar_comments
         }
+
 
     def _initialize_llm(self) -> None:
         """Loads Qwen endpoint wrapped in ChatHuggingFace for conversational support."""
@@ -138,7 +183,7 @@ class FunctionCallingAgent:
         )
         self._chat_model = ChatHuggingFace(llm=llm)
 
-    def run(self, query: str, max_iterations: int = 5) -> str:
+    def run(self, query: str, chat_history: Optional[List[Dict[str, str]]] = None, dataset_context: Optional[str] = None, max_iterations: int = 5) -> str:
         """Runs the ReAct loop until a final answer is retrieved or iteration limit is reached."""
         from models.safety_guardrails import SafetyGuardrail
         guardrail = SafetyGuardrail()
@@ -153,7 +198,8 @@ class FunctionCallingAgent:
             "You have access to the following tools:\n\n"
             "- get_platform_metrics(platform: str): Returns polarization rates, average toxicity, and sentiment percentages for a given platform name ('twitter', 'tiktok', 'instagram').\n"
             "- get_spike_events(): Returns a list of detected temporal activity spikes mapped to external soccer matches/events.\n"
-            "- get_top_polarized_topics(): Returns the most common words found in polarized messages.\n\n"
+            "- get_top_polarized_topics(): Returns the most common words found in polarized messages.\n"
+            "- retrieve_similar_comments(query: str): Search and return real user comments from the dataset that match or are semantically close to a query topic.\n\n"
             "You MUST write all intermediate thoughts and actions in the EXACT format below:\n"
             "Thought: <your thought process>\n"
             "Action: <tool_name>(<argument>)\n"
@@ -166,12 +212,34 @@ class FunctionCallingAgent:
             "2. If you do not need to call a tool, directly write your Final Answer.\n"
         )
 
+        if dataset_context:
+            system_prompt += f"\n\nCURRENT ACTIVE DATASET CONTEXT:\n{dataset_context}\n"
+
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"User Query: {query}")
+            SystemMessage(content=system_prompt)
         ]
+
+        if chat_history:
+            # Filter out current user query from history to avoid duplicates
+            history_to_process = chat_history
+            if history_to_process and history_to_process[-1].get("role") == "user" and history_to_process[-1].get("content") == query:
+                history_to_process = history_to_process[:-1]
+
+            # Keep last 10 messages (approx 5 turns) for token efficiency
+            for msg in history_to_process[-10:]:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if not content:
+                    continue
+                if role == "user":
+                    messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=content))
+
+        messages.append(HumanMessage(content=f"User Query: {query}"))
         
         iteration = 0
+
 
         while iteration < max_iterations:
             print(f"Agent Loop iteration {iteration + 1}...")

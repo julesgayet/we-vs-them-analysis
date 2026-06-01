@@ -33,16 +33,26 @@ class AIAssistant:
         )
         self._chat_model = ChatHuggingFace(llm=llm)
 
-    def retrieve_context_documents(self, query: str, k: int = 6) -> str:
+    def retrieve_context_documents(self, query: str, k: int = 6, allowed_platforms: Optional[List[str]] = None) -> str:
         """Similarity search in FAISS vector store to get supporting comment examples with metadata."""
         try:
             vectorstore = self.vectorstore_manager.load_vector_store()
             if vectorstore is None:
                 return "No specific examples found."
 
-            docs = vectorstore.similarity_search(query, k=k)
+            # If filtering by platform, search for more documents so we can filter them in memory
+            search_k = k * 3 if allowed_platforms else k
+            docs = vectorstore.similarity_search(query, k=search_k)
             if not docs:
                 return "No specific examples found."
+
+            # Filter documents in memory
+            if allowed_platforms:
+                allowed_lower = [p.lower() for p in allowed_platforms]
+                docs = [
+                    doc for doc in docs 
+                    if str(doc.metadata.get("platform", "")).lower() in allowed_lower
+                ][:k]
 
             examples = []
             for doc in docs:
@@ -243,7 +253,13 @@ class AIAssistant:
 
         # Build Context
         stats_context = self.build_stats_context(filtered_df)
-        retrieved_docs_text = self.retrieve_context_documents(prompt)
+        
+        # Get allowed platforms dynamically from filtered_df
+        allowed_platforms = None
+        if not filtered_df.empty and 'platform' in filtered_df.columns:
+            allowed_platforms = list(filtered_df['platform'].unique())
+            
+        retrieved_docs_text = self.retrieve_context_documents(prompt, allowed_platforms=allowed_platforms)
         
         # Add extreme examples and matching query conditions
         extreme_context = self.get_extreme_comments_context(filtered_df)

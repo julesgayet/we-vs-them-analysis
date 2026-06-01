@@ -84,7 +84,7 @@ class PolarizationAnalyzer:
             neg_counts.append(neg_cnt)
             int_counts.append(int_cnt)
             hedge_counts.append(hedge_cnt)
-            is_polarized.append(us_cnt > 0 and them_cnt > 0)
+            is_polarized.append((us_cnt > 0 and them_cnt > 0) or ((us_cnt > 0 or them_cnt > 0) and (int_cnt > 0 or neg_cnt > 0)))
 
         return pd.DataFrame({
             "us_count": us_counts,
@@ -157,7 +157,13 @@ class LinguisticPipelineManager:
                 input_file = os.path.join(root, file)
                 rel_path = os.path.relpath(input_file, input_dir)
                 output_file = os.path.join(output_dir, rel_path)
+                
+                if os.path.exists(output_file):
+                    print(f"Skipping {input_file}, output already exists at {output_file}")
+                    continue
+                    
                 self.process_file(input_file, output_file)
+
 
 
 if __name__ == "__main__":
