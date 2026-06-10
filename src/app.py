@@ -248,6 +248,57 @@ if uploaded_file is not None:
                 status.update(label="❌ Processing failed", state="error")
 
 st.sidebar.markdown("---")
+
+# Delete Dataset Section
+st.sidebar.subheader("Delete a Dataset")
+delete_target = st.sidebar.selectbox("Select Dataset to Delete", ["Select..."] + sorted(list(all_platforms_in_data)))
+if delete_target != "Select...":
+    confirm_delete = st.sidebar.checkbox(f"Confirm deletion of {delete_target}")
+    if confirm_delete:
+        if st.sidebar.button(f"Permanently Delete {delete_target}", type="primary"):
+            with st.sidebar.status(f"Deleting {delete_target} dataset...", expanded=True) as status:
+                import shutil
+                target_lower = delete_target.lower()
+                
+                processed_path = os.path.join("data/processed", target_lower)
+                scored_path = os.path.join("data/scored", target_lower)
+                
+                deleted_any = False
+                if os.path.exists(processed_path):
+                    shutil.rmtree(processed_path)
+                    deleted_any = True
+                if os.path.exists(scored_path):
+                    shutil.rmtree(scored_path)
+                    deleted_any = True
+                
+                if deleted_any:
+                    st.write("Rebuilding FAISS vector index...")
+                    try:
+                        from rag.vectorstore import VectorStoreManager
+                        v_manager = VectorStoreManager()
+                        v_manager.build_vector_store()
+                    except Exception as e:
+                        st.write(f"Warning: Failed to rebuild FAISS index: {e}")
+                    
+                    st.write("Updating Causal Analysis...")
+                    try:
+                        from preprocessing.causal_analysis import CausalAnalyzer
+                        c_analyzer = CausalAnalyzer()
+                        c_analyzer.run_analysis()
+                    except Exception as e:
+                        st.write(f"Warning: Failed to run causal analysis: {e}")
+                    
+                    status.update(label="✅ Success! Dataset Deleted & Re-indexed", state="complete")
+                    st.sidebar.success(f"Deleted {delete_target} dataset. Reloading...")
+                    st.cache_data.clear()
+                    try:
+                        st.rerun()
+                    except AttributeError:
+                        st.experimental_rerun()
+                else:
+                    status.update(label="❌ Dataset files not found", state="error")
+
+st.sidebar.markdown("---")
 scored_percent = (filtered_df['is_scored'].sum() / len(filtered_df)) * 100
 if scored_percent < 100:
     st.sidebar.warning(f"⏳ AI Scoring in progress... ({scored_percent:.1f}%). Refresh for updates.")
@@ -314,7 +365,7 @@ with tab2:
 
     if scored_percent > 0:
         fig_tox = px.bar(
-            x=["Normal", "Polarized ('Us vs Them')"],
+            x=["Normal", "Polarized ('We vs Them')"],
             y=[avg_tox_non_pol, avg_tox_pol],
             color=["Normal", "Polarized"],
             color_discrete_map={"Normal": "#1f77b4", "Polarized": "#ff4b4b"},
@@ -435,12 +486,85 @@ with tab4:
             
     st.markdown("---")
     st.subheader("Detected Temporal Activity Spikes")
-    spikes_path = "data/processed/detected_spikes.csv"
-    if os.path.exists(spikes_path):
-        spikes_df = pd.read_csv(spikes_path)
-        st.dataframe(spikes_df[['parsed_date', 'comment_count', 'event']], use_container_width=True, height=250)
+    
+    # Dynamically detect spikes on the active filtered_df
+    def detect_dynamic_spikes(f_df: pd.DataFrame, threshold_std: float = 1.5) -> pd.DataFrame:
+        if f_df.empty:
+            return pd.DataFrame()
+        col = 'timestamp' if 'timestamp' in f_df.columns else ('Timestamp' if 'Timestamp' in f_df.columns else 'createTimeISO')
+        if col not in f_df.columns:
+            return pd.DataFrame()
+        df_dates = f_df.copy()
+        df_dates['parsed_date'] = pd.to_datetime(df_dates[col], errors='coerce').dt.date
+        df_dates = df_dates.dropna(subset=['parsed_date'])
+        if df_dates.empty:
+            return pd.DataFrame()
+        daily_counts = df_dates.groupby('parsed_date').size().rename('comment_count').reset_index()
+        daily_counts = daily_counts.sort_values(by='parsed_date').reset_index(drop=True)
+        if len(daily_counts) < 7:
+            mean_val = daily_counts['comment_count'].mean()
+            std_val = daily_counts['comment_count'].std() if daily_counts['comment_count'].std() > 0 else 1.0
+        else:
+            rolling = daily_counts['comment_count'].rolling(window=7, min_periods=1)
+            mean_val = rolling.mean()
+            std_val = rolling.std().fillna(1.0)
+        daily_counts['is_spike'] = daily_counts['comment_count'] > (mean_val + threshold_std * std_val)
+        return daily_counts[daily_counts['is_spike'] == True]
+
+    spikes_df = detect_dynamic_spikes(filtered_df)
+    
+    if not spikes_df.empty:
+        # Load pre-calculated spikes for event mapping
+        spikes_path = "data/processed/detected_spikes.csv"
+        event_map = {}
+        if os.path.exists(spikes_path):
+            try:
+                static_spikes = pd.read_csv(spikes_path)
+                event_map = dict(zip(static_spikes['parsed_date'].astype(str), static_spikes['event']))
+            except Exception:
+                pass
+                
+        event_calendar = {
+            "2025-04-15": "Champions League Quarter-Final (PSG vs Barcelona / Dortmund vs Atletico)",
+            "2025-04-16": "Champions League Quarter-Final (Man City vs Real Madrid / Bayern vs Arsenal)",
+            "2025-04-14": "Premier League Matchday / UCL Match Eve Anticipation",
+            "2023-01-16": "Supercopa de España Final (Real Madrid vs Barcelona)",
+            "2023-01-19": "Riyadh Season Cup (PSG vs Riyadh XI - Messi vs Ronaldo)",
+            "2025-02-25": "Champions League Round of 16 Matches",
+            "2025-02-14": "Valentine's Day / European League Fixtures",
+            "2025-02-10": "Premier League Monday Night Football",
+            "2022-04-28": "Europa League Semi-Finals First Leg",
+            "2025-03-04": "Champions League Round of 16 Second Leg"
+        }
+        
+        def get_event(date_val):
+            d_str = str(date_val)
+            if d_str in event_map:
+                return event_map[d_str]
+            return event_calendar.get(d_str, "Unidentified Event")
+            
+        spikes_df['event'] = spikes_df['parsed_date'].apply(get_event)
+        
+        # Filter to keep only football-related events (since the project is football-focused)
+        football_keywords = [
+            "champions league", "europa league", "premier league", "laliga", "serie a", "ligue 1",
+            "ucl", "uel", "psg", "barcelona", "barca", "real madrid", "madrid", "bayern", 
+            "dortmund", "atletico", "man city", "chelsea", "liverpool", "arsenal", "juventus", 
+            "milan", "inter", "roma", "tottenham", "spurs", "manchester", "united",
+            "messi", "ronaldo", "mbappe", "neymar", "haaland", "lamine", "yamal",
+            "supercopa", "copa", "football", "soccer", "foot", "matchday", "el clasico", "clasico",
+            "riyadh season cup", "leicester", "leeds", "everton", "newcastle",
+            "fixture", "fixtures", "derby", "cup", "tournament"
+        ]
+        
+        filtered_spikes = spikes_df[spikes_df['event'].str.lower().apply(lambda x: any(kw in str(x) for kw in football_keywords))]
+        
+        if not filtered_spikes.empty:
+            st.dataframe(filtered_spikes[['parsed_date', 'comment_count', 'event']], use_container_width=True, height=250)
+        else:
+            st.info("No football-related spikes detected for the selected platform/dataset source.")
     else:
-        st.warning("No detected spikes dataset found.")
+        st.info("No activity spikes detected for the selected platform/dataset source.")
 
 with tab5:
     st.header("Explainable AI (XAI) Explainer")

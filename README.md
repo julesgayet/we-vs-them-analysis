@@ -1,6 +1,6 @@
 # We vs Them Analysis Dashboard
 
-This project is a modular data science and Natural Language Processing (NLP) platform designed to monitor, analyze, and quantify **polarization** ("Us vs Them" discourse) and **toxicity** across multiple social media networks (Twitter, TikTok, Instagram, and Reddit).
+This project is a modular data science and Natural Language Processing (NLP) platform designed to monitor, analyze, and quantify **polarization** ("We vs Them" discourse) and **toxicity** across multiple social media networks (Twitter, TikTok, Instagram, and Reddit).
 
 It features an interactive **Streamlit** dashboard integrated with an AI agent powered by **RAG (Retrieval-Augmented Generation)** to query live statistics and retrieve concrete comment examples.
 
@@ -11,8 +11,6 @@ It features an interactive **Streamlit** dashboard integrated with an AI agent p
 The codebase is highly modularized, adhering strictly to SOLID principles:
 
 - **`src/preprocessing/`**: Collection and initial linguistic pipelines.
-  - `collect_data.py`: Scrapes Reddit comments using the PRAW API.
-  - `download_hf_data.py`: Downloads and filters relevant datasets from Hugging Face.
   - `linguistic_analysis.py`: Analyzes grammar structures with **spaCy** to tag polarization.
   - `eda_analysis.py`: Extracts top key phrases in polarized discussions.
   - `bias_check.py`: Calculates platform distributions and exports bias charts.
@@ -27,16 +25,11 @@ The codebase is highly modularized, adhering strictly to SOLID principles:
 
 ## 🔑 Environment Variables Setup (`.env`)
 
-To run the data collection pipelines and query the AI agent, you must create a file named `.env` at the root of the project.
+To run the AI agent and query the models, you must create a file named `.env` at the root of the project.
 
 Copy and fill out the following template:
 
 ```env
-# Reddit API (PRAW) - Required for collect_data.py
-REDDIT_CLIENT_ID=your_reddit_client_id
-REDDIT_CLIENT_SECRET=your_reddit_client_secret
-REDDIT_USER_AGENT=we-vs-them-analysis
-
 # Hugging Face Access Token - Required for scoring models and AI Chat
 # Generate a token (scope: read or inference) at https://huggingface.co/settings/tokens
 HUGGINGFACE_TOKEN=hf_your_huggingface_access_token
@@ -75,16 +68,13 @@ To build or refresh the data displayed in the dashboard, run the scripts in the 
 # Ensure virtual environment is active
 source venv/bin/activate
 
-# 1. Download or scrape raw datasets
-python src/preprocessing/download_hf_data.py
-
-# 2. Run linguistic analysis to identify polarized comments
+# 1. Run linguistic analysis to identify polarized comments
 python src/preprocessing/linguistic_analysis.py
 
-# 3. Score toxicity and sentiments
+# 2. Score toxicity and sentiments
 python src/models/sentiment_toxicity.py
 
-# 4. Generate the FAISS vector database for the AI assistant
+# 3. Generate the FAISS vector database for the AI assistant
 python src/rag/vectorstore.py
 ```
 
@@ -105,4 +95,6 @@ The web application will open automatically in your browser at `http://localhost
 - **Global Overview**: Key metrics (polarization rates, message count, average toxicity) and interactive visual breakdowns (Plotly).
 - **Toxicity Analysis**: Side-by-side comparison of normal vs. polarized comments, and top 10 most toxic comments list.
 - **Data Explorer**: High-performance tabular search with filters (toxicity threshold, platform, sentiment, and polarization).
+- **Fairness & Causal**: Platform bias reports (True/False Positive Rate gaps, Equalized Odds) and timeline spike mapping to high-profile football matchdays.
+- **XAI Explainer**: Token-level feature importance heatmaps powered by LIME/SHAP to explain deep transformer classification decisions.
 - **AI Assistant**: Conversational agent answering complex analytical questions using dynamic stats and retrieved context examples.

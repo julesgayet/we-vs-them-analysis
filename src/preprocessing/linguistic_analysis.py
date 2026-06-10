@@ -20,7 +20,7 @@ class TextCleaner:
         text = self.WHITESPACE_PATTERN.sub(' ', text)
         return text.strip()
 class PolarizationAnalyzer:
-    """Analyzes text for polarized 'Us vs Them' structures and grammatical features."""
+    """Analyzes text for polarized 'We vs Them' structures and grammatical features."""
 
     def __init__(self, spacy_model_name: str = "en_core_web_sm") -> None:
         self.nlp = spacy.load(spacy_model_name, disable=["ner"])

@@ -101,7 +101,7 @@ class AIAssistant:
                 f"  * Total messages: {plat_total}\n"
                 f"  * Polarization rate: {plat_pol:.1f}%\n"
                 f"  * Average toxicity: {plat_tox:.3f}\n"
-                f"  * Average toxicity of polarized ('Us vs Them') messages: {plat_tox_pol:.3f}\n"
+                f"  * Average toxicity of polarized ('We vs Them') messages: {plat_tox_pol:.3f}\n"
                 f"  * Average toxicity of normal messages: {plat_tox_non_pol:.3f}"
             )
         platform_stats_str = "\n".join(platform_stats)
@@ -109,7 +109,7 @@ class AIAssistant:
         context = (
             f"GLOBAL STATISTICS CONTEXT:\n"
             f"- Total analyzed messages: {total_msgs}\n"
-            f"- Polarization Rate (Us vs Them language): {pol_pct:.1f}%\n"
+            f"- Polarization Rate (We vs Them language): {pol_pct:.1f}%\n"
             f"- Average Toxicity Score: {avg_tox:.3f}\n"
             f"- Average Toxicity for Normal messages: {avg_tox_non_pol:.3f}\n"
             f"- Average Toxicity for Polarized messages: {avg_tox_pol:.3f}\n\n"
@@ -169,7 +169,7 @@ class AIAssistant:
         context_str = "EXTREME EXAMPLES FROM THE DATASET:\n\n"
         context_str += "Top 10 Most Toxic Comments:\n"
         context_str += "\n".join(toxic_lines) if toxic_lines else "None found."
-        context_str += "\n\nTop 10 Most Toxic Polarized ('Us vs Them') Comments:\n"
+        context_str += "\n\nTop 10 Most Toxic Polarized ('We vs Them') Comments:\n"
         context_str += "\n".join(pol_lines) if pol_lines else "None found."
         
         return context_str

@@ -82,15 +82,104 @@ class CausalAnalyzer:
         daily_counts['is_spike'] = daily_counts['comment_count'] > (mean_val + threshold_std * std_val)
         return daily_counts[daily_counts['is_spike'] == True]
 
-    def map_spikes_to_events(self, spikes_df: pd.DataFrame) -> pd.DataFrame:
-        """Maps detected spikes to known external sport events."""
+    def map_spikes_to_events(self, spikes_df: pd.DataFrame, full_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        """Maps detected spikes to known external sport events, dynamically detecting them if needed."""
         if spikes_df.empty:
             return pd.DataFrame()
 
-        spikes_df['event'] = spikes_df['parsed_date'].apply(
-            lambda d: self.event_calendar.get(str(d), "Unknown Sports Event")
-        )
+        if full_df is None:
+            full_df = self.load_scored_data()
+
+        events = []
+        for _, row in spikes_df.iterrows():
+            date_str = str(row['parsed_date'])
+            # Check calendar first
+            if date_str in self.event_calendar:
+                events.append(self.event_calendar[date_str])
+            else:
+                # Try to dynamically detect event from comments on that date
+                detected = self._detect_event_from_comments(date_str, full_df)
+                events.append(detected)
+
+        spikes_df['event'] = events
         return spikes_df
+
+    def _detect_event_from_comments(self, date_str: str, full_df: pd.DataFrame) -> str:
+        """Detects the event name from the comments on a given date using LLM or fallback frequency analysis."""
+        date_comments = full_df[full_df['parsed_date'].astype(str) == date_str]
+        if date_comments.empty:
+            return "Unknown Event"
+
+        comments = date_comments['clean_text'].dropna().head(30).tolist()
+        if not comments:
+            return "Unknown Event"
+
+        # Try using Hugging Face LLM if token is present
+        from dotenv import load_dotenv
+        load_dotenv()
+        hf_token = os.getenv("HUGGINGFACE_TOKEN")
+        
+        if hf_token:
+            try:
+                os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
+                from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+                from langchain_core.messages import SystemMessage, HumanMessage
+                
+                llm = HuggingFaceEndpoint(
+                    repo_id="Qwen/Qwen2.5-7B-Instruct",
+                    task="text-generation",
+                    max_new_tokens=40,
+                    temperature=0.1
+                )
+                chat = ChatHuggingFace(llm=llm)
+                
+                comments_str = "\n".join([f"- {c}" for c in comments])
+                messages = [
+                    SystemMessage(content=(
+                        "You analyze social media comments from a specific date to identify the single main event, news, or match being discussed. "
+                        "Respond with ONLY the name of the main event or topic (maximum 6 words), no extra text."
+                    )),
+                    HumanMessage(content=f"Date: {date_str}\nComments:\n{comments_str}")
+                ]
+                res = chat.invoke(messages).content.strip()
+                if res:
+                    return res
+            except Exception as e:
+                print(f"LLM event detection failed for {date_str}: {e}. Using fallback.")
+
+        # Fallback keyword extraction
+        return self._fallback_detect_event(date_str, comments)
+
+    def _fallback_detect_event(self, date_str: str, comments: List[str]) -> str:
+        """Fallback method to extract event name using word frequencies when LLM is unavailable."""
+        if not comments:
+            return "Unknown Event"
+
+        text = " ".join(comments).lower()
+        import re
+        words = re.findall(r'\b[a-z]{4,15}\b', text)
+        
+        stop_words = {
+            "this", "that", "with", "from", "they", "them", "have", "what", "their", 
+            "will", "your", "about", "there", "would", "like", "just", "some", "more",
+            "people", "about", "where", "when", "here", "there", "their", "being", "been",
+            "were", "than", "then", "into", "could"
+        }
+        filtered = [w for w in words if w not in stop_words]
+        
+        if not filtered:
+            return "Activity Spike"
+            
+        from collections import Counter
+        common = Counter(filtered).most_common(3)
+        keywords = ", ".join([w[0].capitalize() for w in common])
+        
+        sports_keywords = {"vs", "game", "match", "cup", "league", "win", "loss", "fc", "real", "barca", "madrid", "chelsea", "united", "psg", "liverpool", "bayern", "juventus", "milan", "inter", "city", "arsenal", "ucl", "champions"}
+        has_sports = any(w in sports_keywords for w in filtered)
+        
+        if has_sports:
+            return f"Sports Discussion ({keywords})"
+        return f"Discussion Spike ({keywords})"
 
     def generate_causal_graph(self, output_path: str = "data/processed/causal_graph.png") -> None:
         """Generates and saves a beautiful causal flowchart using matplotlib."""
@@ -105,7 +194,7 @@ class CausalAnalyzer:
         ax.text(0.5, 0.8, "Spike in Activity\n(High Volume of Comments)", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightyellow", ec="orange", lw=2), fontsize=12)
         ax.text(0.9, 0.8, "Increased Toxicity\n& Out-group Hostility", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightpink", ec="red", lw=2), fontsize=12)
 
-        ax.text(0.5, 0.4, "Us vs Them Polarization\n(In-group Bias)", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightgreen", ec="green", lw=2), fontsize=12)
+        ax.text(0.5, 0.4, "We vs Them Polarization\n(In-group Bias)", ha="center", va="center", bbox=dict(boxstyle="round,pad=0.5", fc="lightgreen", ec="green", lw=2), fontsize=12)
 
         # Arrows
         ax.annotate("", xy=(0.35, 0.8), xytext=(0.25, 0.8), arrowprops=arrow_style)
@@ -119,13 +208,30 @@ class CausalAnalyzer:
         ax.text(0.52, 0.6, "drives out-grouping", ha="left", va="center", fontsize=10, fontstyle="italic")
         ax.text(0.72, 0.58, "correlates with", ha="left", va="center", fontsize=10, fontstyle="italic")
 
-        ax.set_title("Causal Pathway of 'Us vs Them' Polarization during Sports Events", fontsize=14, fontweight="bold", pad=20)
+        ax.set_title("Causal Pathway of 'We vs Them' Polarization during Sports Events", fontsize=14, fontweight="bold", pad=20)
         
         plt.tight_layout()
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         plt.savefig(output_path, dpi=150)
         plt.close()
         print(f"✅ Saved causal graph visualization to {output_path}")
+
+    def _is_football_related(self, event_name: str) -> bool:
+        """Checks if the event description is related to football (soccer)."""
+        event_lower = event_name.lower()
+        
+        football_keywords = [
+            "champions league", "europa league", "premier league", "laliga", "serie a", "ligue 1",
+            "ucl", "uel", "psg", "barcelona", "barca", "real madrid", "madrid", "bayern", 
+            "dortmund", "atletico", "man city", "chelsea", "liverpool", "arsenal", "juventus", 
+            "milan", "inter", "roma", "tottenham", "spurs", "manchester", "united",
+            "messi", "ronaldo", "mbappe", "neymar", "haaland", "lamine", "yamal",
+            "supercopa", "copa", "football", "soccer", "foot", "matchday", "el clasico", "clasico",
+            "riyadh season cup", "leicester", "leeds", "everton", "newcastle",
+            "fixture", "fixtures", "derby", "cup", "tournament"
+        ]
+        
+        return any(kw in event_lower for kw in football_keywords)
 
     def run_analysis(self) -> None:
         """Runs the entire causal analysis pipeline."""
@@ -135,7 +241,13 @@ class CausalAnalyzer:
             return
 
         spikes = self.detect_volume_spikes(df)
-        spikes_with_events = self.map_spikes_to_events(spikes)
+        spikes_with_events = self.map_spikes_to_events(spikes, df)
+
+        # Filter to keep only football-related events
+        if not spikes_with_events.empty:
+            spikes_with_events = spikes_with_events[
+                spikes_with_events['event'].apply(self._is_football_related)
+            ]
 
         print("\n--- Detected Activity Spikes and External Events ---")
         if spikes_with_events.empty:

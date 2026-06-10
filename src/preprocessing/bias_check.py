@@ -100,7 +100,7 @@ class BiasAnalyzer:
 
         # Plot 2: Polarization by Platform
         polarized_stats.plot(kind='bar', color='salmon', ax=ax2)
-        ax2.set_title("Percentage of 'Us vs Them' Content")
+        ax2.set_title("Percentage of 'We vs Them' Content")
         ax2.set_ylabel("% Polarized")
         ax2.tick_params(axis='x', rotation=45)
 
