@@ -1,0 +1,90 @@
+==================================================
+            SARCASM & ERROR ANALYSIS REPORT       
+==================================================
+
+--- Part 1: Sarcasm Evaluation Set Results ---
+Toxicity Accuracy: 0.9333
+Toxicity Precision: 1.0000
+Toxicity Recall: 0.6667
+Toxicity F1-Score: 0.8000
+Sentiment Accuracy: 0.4667
+
+Confusion Matrix (Toxicity):
+  TP: 2  |  FP: 0 (Sarcasm flagged as toxic)
+  FN: 1  |  TN: 12 (Sarcasm correctly flagged as safe)
+
+Detailed Predictions:
+Text: "Oh, what a brilliant defense, letting them score in the last minute. /s"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=positive
+
+Text: "Clearly, the referee is completely unbiased. /s"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=neutral, Pred=positive
+
+Text: "I love waiting 3 hours in the rain for a match to get cancelled. So much fun!"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=positive
+
+Text: "Wow, you are an absolute genius. Maybe try using your brain next time."
+  - Toxicity: True=1, Pred=0
+  - Sentiment: True=negative, Pred=positive
+
+Text: "Congratulations to the team for another stellar performance of doing absolutely nothing."
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=positive
+
+Text: "Oh sure, blame the goalie when the defense was literally sleeping. /s"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=negative
+
+Text: "I'm so happy we bought another player for 100m just to sit on the bench. Kappa"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=neutral, Pred=positive
+
+Text: "This was the best game ever! (If you enjoy watching paint dry, that is)."
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=positive
+
+Text: "Yeah, because losing 4-0 at home is exactly how we wanted to start the season."
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=negative, Pred=negative
+
+Text: "Brilliant tactical decision to play with 10 defenders. Bravo."
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=neutral, Pred=positive
+
+Text: "Shut up, you clueless idiot. You know nothing about football."
+  - Toxicity: True=1, Pred=1
+  - Sentiment: True=negative, Pred=negative
+
+Text: "This player is trash, sell him immediately."
+  - Toxicity: True=1, Pred=1
+  - Sentiment: True=negative, Pred=negative
+
+Text: "What a beautiful goal by Messi, absolutely world class!"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=positive, Pred=positive
+
+Text: "Very happy with the three points today, let's keep it going!"
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=positive, Pred=positive
+
+Text: "The match ended in a 0-0 draw, both teams played defensively."
+  - Toxicity: True=0, Pred=0
+  - Sentiment: True=neutral, Pred=neutral
+
+--- Part 2: Dataset Sarcasm Audit ---
+Total sarcastic comments found: 27
+Average toxicity score: 0.0473
+Sentiment Distribution: {'negative': 22, 'neutral': 5}
+
+Examples of sarcastic comments predicted as toxic:
+
+--- Error Analysis Insights ---
+1. False Positives on Non-Toxic Sarcasm:
+   Sarcasm markers like '/s' or 'Kappa' are sometimes associated with negative sentiment but are not toxic.
+   However, the model occasionally assigns higher toxicity scores to sarcastic comments due to keywords like 'garbage' or 'nothing'.
+2. Sentiment Misclassifications:
+   Sarcastic comments expressing positive literal phrasing but negative intent (e.g., 'Oh, brilliant decision') are frequently
+   misclassified as positive/neutral by shallow sentiment models, as they lack deep semantic context of irony.

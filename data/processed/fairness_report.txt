@@ -1,0 +1,46 @@
+==================================================
+            MODEL BIAS & FAIRNESS REPORT          
+==================================================
+
+Total scored comments analyzed: 56560
+
+--- Platform Fairness Metrics (Proxy: Polarization as Target) ---
+Platform: Twitter
+  - Total Samples: 26042
+  - True Positive Rate (TPR): 0.1108
+  - False Positive Rate (FPR): 0.0590
+
+Platform: Yallashoot
+  - Total Samples: 15
+  - True Positive Rate (TPR): 0.0000
+  - False Positive Rate (FPR): 0.0000
+
+Platform: Reddit
+  - Total Samples: 2000
+  - True Positive Rate (TPR): 0.0811
+  - False Positive Rate (FPR): 0.1187
+
+Platform: Tiktok
+  - Total Samples: 20582
+  - True Positive Rate (TPR): 0.0000
+  - False Positive Rate (FPR): 0.0036
+
+Platform: Instagram
+  - Total Samples: 7921
+  - True Positive Rate (TPR): 0.0934
+  - False Positive Rate (FPR): 0.0734
+
+--- Disparities ---
+  - False Positive Rate (FPR) Gap: 0.1187
+  - True Positive Rate (TPR) Gap: 0.1108
+  - Equalized Odds (EO) Disparity: 0.2294
+
+--- Bias Mitigation Guidelines ---
+1. Platform-Specific Classification Thresholds:
+   Adjust toxicity classification thresholds per platform to calibrate and equalize FPRs.
+2. Targeted Data Augmentation:
+   Collect more training examples from under-represented platforms (e.g. TikTok) to align model representations.
+3. Dialect/Slang Alignment:
+   Fine-tune toxicity models on domain-specific social media text to decrease false positives caused by benign in-group slang.
+4. Regular Audits:
+   Run continuous fairness pipelines on newly collected samples to monitor drift in EO disparity.
