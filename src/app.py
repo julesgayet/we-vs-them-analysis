@@ -175,7 +175,7 @@ st.sidebar.title("Controls")
 
 # Scan processed directory dynamically to find all platform names
 tutor_platforms = ['Twitter', 'Tiktok', 'Instagram']
-hf_platforms = ['Reddit', 'Yallashoot']
+hf_platforms = ['Reddit']
 
 all_platforms_in_data = set()
 if os.path.exists("data/processed"):
@@ -187,7 +187,7 @@ dataset_sources = []
 if any(p in all_platforms_in_data for p in tutor_platforms):
     dataset_sources.append("Dataset (Twitter, TikTok, Instagram)")
 if any(p in all_platforms_in_data for p in hf_platforms):
-    dataset_sources.append("Hugging Face Dataset (Reddit, YallaShoot)")
+    dataset_sources.append("Hugging Face Dataset (Reddit)")
 
 # Add custom uploaded platforms dynamically
 for plat in sorted(all_platforms_in_data):
@@ -202,8 +202,8 @@ st.session_state.selected_source = selected_source
 
 if selected_source == "Dataset (Twitter, TikTok, Instagram)":
     allowed_platforms = ['Twitter', 'Tiktok', 'Instagram']
-elif selected_source == "Hugging Face Dataset (Reddit, YallaShoot)":
-    allowed_platforms = ['Reddit', 'Yallashoot']
+elif selected_source == "Hugging Face Dataset (Reddit)":
+    allowed_platforms = ['Reddit']
 else:
     import re
     match = re.search(r'\((.*?)\)', selected_source)

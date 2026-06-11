@@ -39,8 +39,8 @@ def load_all_scored_data(scored_dir: str = "data/scored") -> pd.DataFrame:
             source = st.session_state.selected_source
             if source == "Dataset (Twitter, TikTok, Instagram)":
                 df = df[df['platform'].isin(['Twitter', 'Tiktok', 'Instagram'])]
-            elif source == "Hugging Face Dataset (Reddit, YallaShoot)":
-                df = df[df['platform'].isin(['Reddit', 'Yallashoot'])]
+            elif source == "Hugging Face Dataset (Reddit)":
+                df = df[df['platform'].isin(['Reddit'])]
             else:
                 import re
                 match = re.search(r'\((.*?)\)', source)
@@ -138,8 +138,8 @@ def retrieve_similar_comments(query: str) -> str:
             source = st.session_state.selected_source
             if source == "Dataset (Twitter, TikTok, Instagram)":
                 allowed_platforms = ['Twitter', 'Tiktok', 'Instagram']
-            elif source == "Hugging Face Dataset (Reddit, YallaShoot)":
-                allowed_platforms = ['Reddit', 'Yallashoot']
+            elif source == "Hugging Face Dataset (Reddit)":
+                allowed_platforms = ['Reddit']
             else:
                 import re
                 match = re.search(r'\((.*?)\)', source)
