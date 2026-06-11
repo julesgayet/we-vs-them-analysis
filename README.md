@@ -31,7 +31,10 @@ Copy and fill out the following template:
 
 ```env
 # Hugging Face Access Token - Required for scoring models and AI Chat
-# Generate a token (scope: read or inference) at https://huggingface.co/settings/tokens
+# Ensure the token has the following permissions (scopes) enabled:
+#   - Read: Read access to contents of all public repositories (default)
+#   - Inference: Make calls to the Serverless Inference API (required for the Qwen 2.5 LLM chat assistant)
+# Generate your token at https://huggingface.co/settings/tokens
 HUGGINGFACE_TOKEN=hf_your_huggingface_access_token
 ```
 
