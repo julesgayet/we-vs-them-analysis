@@ -43,7 +43,7 @@ HUGGINGFACE_TOKEN=hf_your_huggingface_access_token
 
 ```bash
 # Clone the repository
-git clone <repository_url>
+git clone https://github.com/julesgayet/we-vs-them-analysis
 cd we-vs-them-analysis
 
 # Create a Python virtual environment
