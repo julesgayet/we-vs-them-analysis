@@ -50,11 +50,11 @@ git clone https://github.com/julesgayet/we-vs-them-analysis
 cd we-vs-them-analysis
 
 # Create a Python virtual environment
-python3 -m venv venv
+python3 -m venv .venv
 
 # Activate the virtual environment
-source venv/bin/activate  # On macOS/Linux
-# venv\Scripts\activate   # On Windows
+source .venv/bin/activate  # On macOS/Linux
+# .venv\Scripts\activate   # On Windows
 
 # Install required packages
 pip install -r requirements.txt
