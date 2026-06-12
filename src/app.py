@@ -136,20 +136,20 @@ st.set_page_config(page_title="We vs Them Analysis", page_icon="🛡️", layout
 # Modern Premium CSS Injection
 st.markdown("""
     <style>
-    .stApp { background-color: #0d1117; color: #c9d1d9; }
+    .stApp { background-color: #f8fafc; color: #0f172a; }
     .main-title {
         font-size: 3.2rem; font-weight: 800;
         background: linear-gradient(90deg, #ff4b4b, #ff8f00);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         margin-bottom: 0px; padding-bottom: 0px;
     }
-    .subtitle { color: #8b949e; font-size: 1.2rem; margin-bottom: 30px; }
-    [data-testid="stMetricValue"] { font-size: 2.5rem !important; font-weight: 800 !important; color: #ffffff !important; }
-    [data-testid="stMetricLabel"] { font-size: 1.1rem !important; color: #8b949e !important; text-transform: uppercase; font-weight: 600; }
-    [data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
+    .subtitle { color: #64748b; font-size: 1.2rem; margin-bottom: 30px; }
+    [data-testid="stMetricValue"] { font-size: 2.5rem !important; font-weight: 800 !important; color: #0f172a !important; }
+    [data-testid="stMetricLabel"] { font-size: 1.1rem !important; color: #64748b !important; text-transform: uppercase; font-weight: 600; }
+    [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e2e8f0; }
     .stTabs [data-baseweb="tab-list"] { gap: 24px; }
     .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; font-size: 1.2rem; border-radius: 4px 4px 0px 0px; gap: 1px; padding-top: 10px; padding-bottom: 10px; }
-    .stTabs [aria-selected="true"] { background-color: rgba(255, 75, 75, 0.1) !important; color: #ff4b4b !important; border-bottom: 2px solid #ff4b4b !important;}
+    .stTabs [aria-selected="true"] { background-color: rgba(255, 75, 75, 0.08) !important; color: #ff4b4b !important; border-bottom: 2px solid #ff4b4b !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -337,7 +337,7 @@ with tab1:
             plat_counts = df['platform'].value_counts().reset_index()
             plat_counts.columns = ['Platform', 'Count']
             fig_plat = px.pie(plat_counts, values='Count', names='Platform', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
-            fig_plat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9")
+            fig_plat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#0f172a")
             st.plotly_chart(fig_plat, use_container_width=True)
         else:
             st.info("Select 'All' to view global distribution.")
@@ -349,7 +349,7 @@ with tab1:
             sent_counts.columns = ['Sentiment', 'Count']
             color_map = {'positive': '#2e7d32', 'neutral': '#1f77b4', 'negative': '#d32f2f'}
             fig_sent = px.bar(sent_counts, x='Sentiment', y='Count', color='Sentiment', color_discrete_map=color_map)
-            fig_sent.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9", showlegend=False)
+            fig_sent.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#0f172a", showlegend=False)
             st.plotly_chart(fig_sent, use_container_width=True)
         else:
             st.info("Waiting for AI results...")
@@ -372,7 +372,7 @@ with tab2:
             labels={'x': 'Message Type', 'y': 'Average Toxicity Score'},
             title="Direct Comparison: Impact of polarized language on toxicity"
         )
-        fig_tox.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9", showlegend=False)
+        fig_tox.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#0f172a", showlegend=False)
         st.plotly_chart(fig_tox, use_container_width=True)
     else:
         st.info("Generating data...")
