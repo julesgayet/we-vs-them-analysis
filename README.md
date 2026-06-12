@@ -42,6 +42,9 @@ HUGGINGFACE_TOKEN=hf_your_huggingface_access_token
 
 ## 🚀 Getting Started
 
+> [!IMPORTANT]
+> This project requires **Python 3.14**.
+
 ### 1. Clone and Install Dependencies
 
 ```bash
