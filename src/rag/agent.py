@@ -195,6 +195,7 @@ class FunctionCallingAgent:
 
         system_prompt = (
             "You are the ReAct Data Analyst Agent. You solve questions step-by-step by thinking and invoking tools.\n"
+            "CRITICAL: You must write all your thoughts, intermediate steps, and Final Answers in the EXACT same language in which the user writes to you (e.g., French if the query is in French, English if it is in English). Never write or respond in Chinese.\n"
             "You have access to the following tools:\n\n"
             "- get_platform_metrics(platform: str): Returns polarization rates, average toxicity, and sentiment percentages for a given platform name ('twitter', 'tiktok', 'instagram').\n"
             "- get_spike_events(): Returns a list of detected temporal activity spikes mapped to external soccer matches/events.\n"
