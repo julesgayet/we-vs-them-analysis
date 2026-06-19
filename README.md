@@ -72,7 +72,8 @@ To build or refresh the data displayed in the dashboard, run the scripts in the 
 
 ```bash
 # Ensure virtual environment is active
-source .venv/bin/activate
+source .venv/bin/activate  # On macOS/Linux
+# .venv\Scripts\activate   # On Windows
 
 # 1. Run linguistic analysis to identify polarized comments
 python src/preprocessing/linguistic_analysis.py
